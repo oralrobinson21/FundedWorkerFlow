@@ -10,6 +10,9 @@ export interface User {
   role: UserRole;
   avatarIndex: number;
   createdAt: string;
+  avgRating?: number;
+  totalRatings?: number;
+  stripeConnectId?: string;
 }
 
 export interface Task {
@@ -26,6 +29,8 @@ export interface Task {
   workerName?: string;
   createdAt: string;
   completedAt?: string;
+  photoUrl?: string;
+  completionPhotoUrl?: string;
 }
 
 export interface Message {
@@ -48,6 +53,17 @@ export interface Conversation {
   lastMessage: string;
   lastMessageTime: string;
   unreadCount: number;
+}
+
+export interface Rating {
+  id: string;
+  taskId: string;
+  ratedUserId: string;
+  ratingUserId: string;
+  ratingUserName: string;
+  score: number;
+  review?: string;
+  createdAt: string;
 }
 
 export const NEIGHBORHOODS = [

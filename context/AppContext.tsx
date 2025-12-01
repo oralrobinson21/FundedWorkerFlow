@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, Task, Conversation, Message, UserRole, TaskStatus } from "@/types";
+import { User, Task, Conversation, Message, UserRole, TaskStatus, Rating } from "@/types";
+import { supabase, userQueries, taskQueries, messageQueries, conversationQueries, ratingQueries } from "@/services/supabase";
 
 interface AppContextType {
   user: User | null;
@@ -8,6 +9,7 @@ interface AppContextType {
   tasks: Task[];
   conversations: Conversation[];
   messages: Record<string, Message[]>;
+  ratings: Rating[];
   login: (name: string, email: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: () => Promise<void>;
@@ -17,6 +19,8 @@ interface AppContextType {
   completeTask: (taskId: string) => Promise<void>;
   sendMessage: (taskId: string, content: string) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
+  createRating: (taskId: string, ratedUserId: string, score: number, review?: string) => Promise<void>;
+  syncWithSupabase: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -38,6 +42,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -45,17 +51,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      const [userData, tasksData, convsData, msgsData] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.USER),
-        AsyncStorage.getItem(STORAGE_KEYS.TASKS),
-        AsyncStorage.getItem(STORAGE_KEYS.CONVERSATIONS),
-        AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
-      ]);
+      // Check if Supabase is connected
+      const isConnected = await checkSupabaseConnection();
+      setIsSupabaseConnected(isConnected);
 
-      if (userData) setUser(JSON.parse(userData));
-      if (tasksData) setTasks(JSON.parse(tasksData));
-      if (convsData) setConversations(JSON.parse(convsData));
-      if (msgsData) setMessages(JSON.parse(msgsData));
+      if (isConnected) {
+        // Try to load from Supabase
+        await syncWithSupabase();
+      } else {
+        // Fallback to AsyncStorage
+        const [userData, tasksData, convsData, msgsData] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.USER),
+          AsyncStorage.getItem(STORAGE_KEYS.TASKS),
+          AsyncStorage.getItem(STORAGE_KEYS.CONVERSATIONS),
+          AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
+        ]);
+
+        if (userData) setUser(JSON.parse(userData));
+        if (tasksData) setTasks(JSON.parse(tasksData));
+        if (convsData) setConversations(JSON.parse(convsData));
+        if (msgsData) setMessages(JSON.parse(msgsData));
+      }
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -63,10 +79,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const checkSupabaseConnection = async (): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.from('users').select('count').limit(1);
+      return !error;
+    } catch {
+      return false;
+    }
+  };
+
+  const syncWithSupabase = async () => {
+    try {
+      // This will be populated when user logs in
+      // For now, just sync available tasks
+      const { data: tasksData } = await taskQueries.getTasks();
+      if (tasksData) setTasks(tasksData);
+    } catch (error) {
+      console.error("Error syncing with Supabase:", error);
+    }
+  };
+
   const saveUser = async (userData: User | null) => {
     try {
       if (userData) {
         await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
+        if (isSupabaseConnected) {
+          await userQueries.createUser(userData);
+        }
       } else {
         await AsyncStorage.removeItem(STORAGE_KEYS.USER);
       }
@@ -78,6 +117,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveTasks = async (tasksData: Task[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasksData));
+      if (isSupabaseConnected && tasksData.length > 0) {
+        // Sync latest task to Supabase
+        const latestTask = tasksData[0];
+        await taskQueries.createTask(latestTask);
+      }
     } catch (error) {
       console.error("Error saving tasks:", error);
     }
@@ -86,6 +130,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveConversations = async (convsData: Conversation[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(convsData));
+      if (isSupabaseConnected && convsData.length > 0) {
+        const latestConv = convsData[0];
+        await conversationQueries.createConversation(latestConv);
+      }
     } catch (error) {
       console.error("Error saving conversations:", error);
     }
@@ -149,6 +197,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
+
+    if (isSupabaseConnected) {
+      await taskQueries.updateTask(taskId, { status: "paid_waiting" });
+    }
   };
 
   const acceptTask = async (taskId: string) => {
@@ -162,6 +214,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
+
+    if (isSupabaseConnected) {
+      await taskQueries.updateTask(taskId, { status: "assigned", workerId: user.id, workerName: user.name });
+    }
 
     const existingConv = conversations.find(c => c.taskId === taskId);
     if (!existingConv) {
@@ -211,6 +267,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
+
+    if (isSupabaseConnected) {
+      await taskQueries.updateTask(taskId, { status: "completed", completedAt: new Date().toISOString() });
+    }
   };
 
   const sendMessage = async (taskId: string, content: string) => {
@@ -231,6 +291,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setMessages(updatedMessages);
     await saveMessages(updatedMessages);
 
+    if (isSupabaseConnected) {
+      await messageQueries.sendMessage(newMessage);
+    }
+
     const updatedConvs = conversations.map(conv =>
       conv.taskId === taskId
         ? { ...conv, lastMessage: content, lastMessageTime: newMessage.timestamp }
@@ -248,6 +312,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveConversations(updatedConvs);
   };
 
+  const createRating = async (taskId: string, ratedUserId: string, score: number, review?: string) => {
+    if (!user) return;
+
+    const newRating: Rating = {
+      id: generateId(),
+      taskId,
+      ratedUserId,
+      ratingUserId: user.id,
+      ratingUserName: user.name,
+      score,
+      review,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedRatings = [...ratings, newRating];
+    setRatings(updatedRatings);
+
+    if (isSupabaseConnected) {
+      await ratingQueries.createRating(newRating);
+    }
+  };
+
+  const syncContextWithSupabase = async () => {
+    await syncWithSupabase();
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -256,6 +346,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tasks,
         conversations,
         messages,
+        ratings,
         login,
         logout,
         switchRole,
@@ -265,6 +356,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         completeTask,
         sendMessage,
         markConversationRead,
+        createRating,
+        syncWithSupabase: syncContextWithSupabase,
       }}
     >
       {children}
