@@ -193,6 +193,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     setUser(newUser);
     await saveUser(newUser);
+
+    // Sync user to backend
+    try {
+      const API_URL = "http://localhost:3001";
+      await fetch(`${API_URL}/api/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser),
+      });
+    } catch (err) {
+      console.error("Failed to sync user to backend:", err);
+    }
+
     return { success: true, user: newUser, message: "Logged in" };
   };
 
@@ -229,42 +242,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createTask = async (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode" | "status">): Promise<Task> => {
     if (!user) throw new Error("User not logged in");
     
-    const newTask: Task = {
-      ...taskData,
-      id: generateId(),
-      posterId: user.id,
-      posterName: user.name,
-      confirmationCode: generateConfirmationCode(),
-      status: "requested",
-      createdAt: new Date().toISOString(),
-    };
-    
-    const updatedTasks = [newTask, ...tasks];
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
-    return newTask;
+    try {
+      const API_URL = "http://localhost:3001";
+      const response = await fetch(`${API_URL}/api/tasks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify(taskData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create task");
+      }
+
+      const task = await response.json();
+      const updatedTasks = [task, ...tasks];
+      setTasks(updatedTasks);
+      await saveTasks(updatedTasks);
+      return task;
+    } catch (err) {
+      console.error("createTask error:", err);
+      throw err;
+    }
   };
 
   const sendOffer = async (taskId: string, note: string, proposedPrice?: number) => {
     if (!user) throw new Error("User not logged in");
     
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) throw new Error("Task not found");
+    try {
+      const API_URL = "http://localhost:3001";
+      const response = await fetch(`${API_URL}/api/tasks/${taskId}/offers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ note, proposedPrice }),
+      });
 
-    const newOffer: JobOffer = {
-      id: generateId(),
-      taskId,
-      helperId: user.id,
-      helperName: user.name,
-      note,
-      proposedPrice,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-    };
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to send offer");
+      }
 
-    const updatedOffers = [...jobOffers, newOffer];
-    setJobOffers(updatedOffers);
-    await saveJobOffers(updatedOffers);
+      const offer = await response.json();
+      const updatedOffers = [...jobOffers, offer];
+      setJobOffers(updatedOffers);
+      await saveJobOffers(updatedOffers);
+    } catch (err) {
+      console.error("sendOffer error:", err);
+      throw err;
+    }
   };
 
   const chooseHelper = async (taskId: string, offerId: string): Promise<{ checkoutUrl?: string }> => {
@@ -276,39 +307,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const task = tasks.find(t => t.id === taskId);
     if (!task) throw new Error("Task not found");
 
-    // TODO: Call backend API to create Stripe Checkout Session
-    // const { checkoutUrl } = await fetch('/api/tasks/choose-helper', {
-    //   method: 'POST',
-    //   body: JSON.stringify({ taskId, helperId: offer.helperId })
-    // }).then(r => r.json());
-    // return { checkoutUrl };
+    try {
+      const API_URL = "http://localhost:3001";
+      const response = await fetch(`${API_URL}/api/tasks/${taskId}/choose-helper`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ helperId: offer.helperId }),
+      });
 
-    // For now, mark as accepted locally and create chat thread
-    const updatedTasks = tasks.map(t =>
-      t.id === taskId ? { ...t, status: "accepted" as TaskStatus, helperId: offer.helperId, helperName: offer.helperName, acceptedAt: new Date().toISOString(), paymentStatus: "paid" as PaymentStatus } : t
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to choose helper");
+      }
 
-    const updatedOffers = jobOffers.map(o =>
-      o.taskId === taskId && o.id !== offerId ? { ...o, status: "declined" as JobOfferStatus } : o.id === offerId ? { ...o, status: "accepted" as JobOfferStatus } : o
-    );
-    setJobOffers(updatedOffers);
-    await saveJobOffers(updatedOffers);
-
-    await createChatThread(taskId, task.posterId, offer.helperId);
-    return {};
+      const result = await response.json();
+      return { checkoutUrl: result.checkoutUrl };
+    } catch (err) {
+      console.error("chooseHelper error:", err);
+      throw err;
+    }
   };
 
   const initializeStripeConnect = async (): Promise<{ url?: string }> => {
     if (!user) throw new Error("User not logged in");
-    // TODO: Call backend API to initiate Stripe Connect onboarding
-    // const { accountLink } = await fetch('/api/stripe/connect/onboard', {
-    //   method: 'POST',
-    //   headers: { 'Authorization': `Bearer ${user.id}` }
-    // }).then(r => r.json());
-    // return { url: accountLink };
-    return {};
+    try {
+      const API_URL = "http://localhost:3001";
+      const response = await fetch(`${API_URL}/api/stripe/connect/onboard`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to initialize Stripe");
+      }
+
+      return await response.json();
+    } catch (err) {
+      console.error("initializeStripeConnect error:", err);
+      throw err;
+    }
   };
 
   const completeTask = async (taskId: string) => {

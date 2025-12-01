@@ -1,0 +1,462 @@
+1️⃣ Where your app is right now (based on that response)
+
+From the bot’s last message, you have:
+	•	✅ Email + OTP login flow
+	•	✅ User type updated with stripeAccountId + payoutsEnabled
+	•	✅ Task type updated with Stripe fields (stripeCheckoutSessionId, stripePaymentIntentId, etc.)
+	•	✅ CreateTaskScreen (post jobs)
+	•	✅ JobListScreen (shows requested jobs)
+	•	✅ JobDetailScreen (offers, choose helper)
+	•	✅ Mode selector + category flow
+	•	✅ AppContext methods like chooseHelper() stubbed to return checkoutUrl
+	•	✅ initializeStripeConnect() stubbed for helper onboarding
+	•	❌ Backend endpoints not implemented yet
+	•	❌ Stripe webhooks not wired
+	•	❌ Chat UI & proof upload not fully implemented
+	•	❌ $7 minimum + 15% fee not enforced in backend
+
+So now we just need to:
+	•	Implement backend endpoints
+	•	Hook them to Stripe Connect Express properly
+	•	Enforce $7 minimum and 15% fee
+	•	Finish chat/proof/complete logic
+	•	Ensure “once job is accepted → it’s cleared from queue & chat is unlocked”
+
+⸻
+
+2️⃣ COPY-PASTE THIS TO YOUR BUILDER / BACKEND DEV
+
+Everything below is written as if you’re talking to them:
+
+⸻
+
+Goal:
+Finish the Stripe Connect Express integration + backend so that:
+	•	Minimum job price is $7
+	•	Platform fee is 15%
+	•	Poster posts a job for free (status="requested")
+	•	Helpers send offers
+	•	Poster chooses helper → must pay via Stripe Checkout
+	•	Once payment is successful:
+	•	Job status becomes "accepted"
+	•	Job is removed from helper queue
+	•	Chat is created/unlocked
+	•	Helper can see full address
+	•	Helper does work, uploads proof
+	•	Both sides confirm → job "completed"
+	•	Stripe handles payouts to helper (Express), and logs all money movements
+
+Stripe must be Connect Express, with application fees and transfers to helper accounts.
+
+⸻
+
+0. Constants & Config
+
+Set these in backend env:
+
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_CONNECT_CLIENT_ID=ca_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+PLATFORM_FEE_PERCENT=15
+MIN_JOB_PRICE_USD=7
+FRONTEND_URL=https://your-frontend-url.com
+API_BASE_URL=https://your-api-url.com
+
+
+⸻
+
+1. User Model Requirements (backend)
+
+The frontend already assumes these fields exist; backend must enforce them:
+
+type User = {
+  id: string;
+  email: string;
+  name?: string;
+  phone?: string;
+  defaultZipCode?: string;
+  accountNumber: string;        // already generated on signup
+  stripeAccountId?: string;     // Stripe Connect Express account ID
+  payoutsEnabled?: boolean;     // true when Stripe says payouts are enabled
+  createdAt: string;
+};
+
+	•	On first login/sign-up, if accountNumber is missing, generate one.
+	•	We will store stripeAccountId after onboarding.
+
+⸻
+
+2. Task / Job Model (backend)
+
+Backend must match the frontend’s Task type and enforce minimum price:
+
+type TaskStatus =
+  | "requested"   // posted, offers allowed, no payment yet
+  | "accepted"    // payment done, helper chosen, chat unlocked
+  | "in_progress" // optional stage
+  | "completed"
+  | "canceled"
+  | "disputed";
+
+type Task = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  zipCode: string;
+  areaDescription?: string;
+  fullAddress?: string;
+  price: number;                       // in USD, must be >= 7
+  status: TaskStatus;
+
+  posterId: string;
+  helperId?: string | null;
+
+  confirmationCode: string;
+  photosRequired: boolean;
+
+  stripeCheckoutSessionId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeChargeId?: string | null;
+  platformFeeAmount?: number | null;   // in cents
+  helperAmount?: number | null;        // in cents
+  paymentStatus?: "pending" | "paid" | "refunded" | "failed";
+
+  createdAt: string;
+  acceptedAt?: string | null;
+  completedAt?: string | null;
+  canceledAt?: string | null;
+  canceledBy?: "poster" | "helper" | null;
+};
+
+
+⸻
+
+3. JobOffer Model
+
+Backend must implement the same JobOffer type:
+
+type JobOfferStatus = "pending" | "accepted" | "declined";
+
+type JobOffer = {
+  id: string;
+  taskId: string;
+  helperId: string;
+  note: string;
+  proposedPrice?: number | null;
+  status: JobOfferStatus;
+  createdAt: string;
+};
+
+	•	Helpers can only create offers on tasks where status === "requested".
+
+⸻
+
+4. Stripe Connect Express Onboarding Endpoint
+
+Endpoint: POST /api/stripe/connect/onboard
+
+Input: none (uses authenticated user)
+
+Flow:
+	1.	Require user auth.
+	2.	If user.stripeAccountId not set:
+	•	Create an Express account:
+
+const account = await stripe.accounts.create({
+  type: "express",
+  email: user.email,
+});
+
+	•	Save stripeAccountId to user.
+
+	3.	Create an account link:
+
+const accountLink = await stripe.accountLinks.create({
+  account: user.stripeAccountId,
+  refresh_url: `${FRONTEND_URL}/payouts/onboarding/refresh`,
+  return_url: `${FRONTEND_URL}/payouts/onboarding/complete`,
+  type: "account_onboarding",
+});
+
+	4.	Return { url: accountLink.url } for the frontend to redirect to.
+
+Later, via Stripe webhook (account.updated), update user.payoutsEnabled when charges_enabled/payouts_enabled are true.
+
+⸻
+
+5. Create Task Endpoint with $7 Minimum
+
+Endpoint: POST /api/tasks
+
+Backend must:
+	•	Validate price >= MIN_JOB_PRICE_USD (7).
+	•	If price < 7, reject with clear error:
+
+{ "error": "Minimum job price is $7.00" }
+
+On success:
+	•	Generate confirmationCode (e.g. 6–8 character random string).
+	•	Set:
+
+status = "requested"
+helperId = null
+paymentStatus = "pending"
+
+Return full Task object to frontend.
+
+⸻
+
+6. Send Offer Endpoint
+
+Endpoint: POST /api/tasks/:taskId/offers
+
+Behavior:
+	•	Only authenticated helpers can call.
+	•	Only allowed if task.status === "requested".
+	•	Creates a JobOffer with:
+	•	status = "pending"
+	•	note (required)
+	•	proposedPrice (optional; frontend may or may not use it)
+
+Return the created offer.
+
+⸻
+
+7. Choose Helper → Create Stripe Checkout Session
+
+Endpoint: POST /api/tasks/:taskId/choose-helper
+
+Input body:
+
+{
+  "helperId": "helper-user-id"
+}
+
+Rules:
+	•	Caller must be the task’s posterId.
+	•	Task status must be "requested".
+	•	Helper must have stripeAccountId set (and ideally payoutsEnabled === true).
+
+Backend Steps:
+	1.	Load task, poster, helper.
+	2.	Convert job price to cents:
+
+const amount = Math.round(task.price * 100); // e.g. $7 -> 700
+const platformFeePercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || "15");
+const applicationFeeAmount = Math.round((platformFeePercent / 100) * amount);
+const helperAmount = amount - applicationFeeAmount;
+
+	3.	Create Stripe Checkout Session:
+
+const session = await stripe.checkout.sessions.create({
+  mode: "payment",
+  payment_intent_data: {
+    application_fee_amount: applicationFeeAmount,
+    transfer_data: {
+      destination: helper.stripeAccountId,
+    },
+  },
+  line_items: [
+    {
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: task.title,
+          description: task.description,
+        },
+        unit_amount: amount,
+      },
+      quantity: 1,
+    },
+  ],
+  customer_email: poster.email,
+  metadata: {
+    taskId: task.id,
+    posterId: task.posterId,
+    helperId: helper.id,
+  },
+  success_url: `${FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+  cancel_url: `${FRONTEND_URL}/payment/cancel?task_id=${task.id}`,
+});
+
+	4.	Save to Task:
+
+task.stripeCheckoutSessionId = session.id;
+task.platformFeeAmount = applicationFeeAmount;
+task.helperAmount = helperAmount;
+// task.status remains "requested" here
+await saveTask(task);
+
+	5.	Return JSON:
+
+{ "checkoutUrl": "https://checkout.stripe.com/..." }
+
+Frontend will redirect user to that URL (this is what chooseHelper() should be using).
+
+⸻
+
+8. Stripe Webhook – Mark Job Accepted, Clear From Queue, Create Chat
+
+Endpoint: POST /api/stripe/webhook
+	•	Use raw body + STRIPE_WEBHOOK_SECRET to verify.
+	•	Listen to checkout.session.completed.
+
+Handler logic:
+
+if (event.type === "checkout.session.completed") {
+  const session = event.data.object;
+
+  const taskId = session.metadata.taskId;
+  const helperId = session.metadata.helperId;
+
+  const task = await getTask(taskId);
+  if (!task) return;
+
+  const paymentIntentId = session.payment_intent;
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const chargeId = paymentIntent.charges.data[0]?.id;
+
+  task.status = "accepted";
+  task.helperId = helperId;
+  task.acceptedAt = new Date().toISOString();
+  task.stripePaymentIntentId = paymentIntentId;
+  task.stripeChargeId = chargeId;
+  task.paymentStatus = "paid";
+
+  await declineOtherJobOffers(taskId, helperId); // mark others as "declined"
+
+  await createChatThread({
+    taskId,
+    posterId: task.posterId,
+    helperId,
+  });
+
+  await saveTask(task);
+}
+
+Key behaviors:
+	•	Job leaves queue because JobList for helpers must ONLY show status === "requested".
+	•	Chat thread is created immediately.
+	•	From this point, poster & helper can chat as long as they’re signed in.
+	•	Full address is now visible to them in JobDetail (front-end already checks status + identity).
+
+⸻
+
+9. Queue Logic (Helper Job List)
+
+In the backend’s job list endpoints (and the way frontend queries), enforce:
+	•	Helper “open jobs” list should only include task.status === "requested".
+
+Once Stripe webhook flips a task to "accepted", it automatically disappears from that list on next fetch.
+
+⸻
+
+10. Chat + Proof + Complete
+
+Implement minimal chat endpoints:
+
+Threads:
+
+type ChatThread = {
+  id: string;
+  taskId: string;
+  posterId: string;
+  helperId: string;
+  createdAt: string;
+  expiresAt: string;   // 3 days after completion or acceptance
+  isClosed: boolean;
+};
+
+Messages:
+
+type ChatMessage = {
+  id: string;
+  threadId: string;
+  senderId: string;
+  text?: string;
+  imageUrl?: string;
+  isProof: boolean;
+  createdAt: string;
+};
+
+Rules:
+	•	Only posterId and helperId can access a given thread.
+	•	Thread is created in webhook when payment completes.
+	•	Messages endpoint: POST /api/chat/threads/:threadId/messages
+	•	Accepts text, imageUrl, isProof.
+
+Complete Task Endpoint:
+
+Endpoint: POST /api/tasks/:taskId/complete
+
+Backend must:
+	1.	Require auth: user must be poster or helper.
+	2.	Check task.status is "accepted" or "in_progress".
+	3.	If task.photosRequired === true:
+	•	Require at least one ChatMessage for that task’s thread with isProof = true and imageUrl not null.
+	4.	If validation passes:
+
+task.status = "completed";
+task.completedAt = new Date().toISOString();
+await saveTask(task);
+
+No extra Stripe calls needed — with Checkout + Connect, funds are already split (platform fee vs helper share), and payouts follow Stripe’s schedule.
+
+⸻
+
+11. Dispute / Cancel (Optional but Nice)
+	•	POST /api/tasks/:taskId/cancel:
+	•	Allowed if status === "requested" or "accepted".
+	•	Sets status = "canceled", canceledBy, canceledAt.
+	•	POST /api/tasks/:taskId/dispute:
+	•	Allowed if status === "completed".
+	•	Sets status = "disputed".
+
+Front-end already has placeholders for cancelTask and disputeTask in AppContext; just wire these endpoints.
+
+⸻
+
+12. Enforce $7 Minimum Everywhere
+	•	Backend POST /api/tasks: reject any price < 7.0.
+	•	Optional: Add server-side sanity check in choose-helper that amount >= MIN_JOB_PRICE_USD * 100 before creating Stripe session.
+
+⸻
+
+13. Final Acceptance Criteria
+
+We’re done when all of this holds true:
+	1.	Users can:
+	•	Sign in via email + OTP.
+	•	Set up payouts as helpers via Stripe Connect Express.
+	2.	Posters can:
+	•	Post jobs (≥ $7) in requested status.
+	•	See helper offers and choose a helper.
+	•	Pay via Stripe Checkout.
+	3.	After payment:
+	•	Stripe webhook marks job as accepted.
+	•	Job disappears from helper queue (only requested show there).
+	•	Chat thread is created.
+	•	Poster & helper can chat and see full address, as long as they’re signed in.
+	4.	Helper uploads proof photo → both confirm → job marked completed.
+	5.	Stripe:
+	•	Deducts our 15% application fee.
+	•	Routes remaining to helper’s Stripe account.
+	•	Logs all charges, fees, and payouts.
+	6.	Minimum job price is enforced at $7, so we never run into negative or dumb tiny transactions.
+
+⸻
+
+End of copy-paste.
+
+⸻
+
+If you want, next step I can do a very short “QA checklist” for you personally:
+
+Step 1: Log in as poster, do X
+Step 2: Log in as helper, do Y
+Step 3: Confirm Z in Stripe dashboard
+
+So you can sanity check your dev/bot when they say “it’s done.”
