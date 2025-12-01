@@ -6,6 +6,7 @@ import { isSupabaseAvailable, userQueries, taskQueries, messageQueries, conversa
 interface AppContextType {
   user: User | null;
   isLoading: boolean;
+  isHelperMode: boolean;
   tasks: Task[];
   conversations: Conversation[];
   messages: Record<string, Message[]>;
@@ -13,6 +14,7 @@ interface AppContextType {
   login: (name: string, email: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: () => Promise<void>;
+  toggleHelperMode: () => Promise<void>;
   createTask: (task: Omit<Task, "id" | "customerId" | "customerName" | "status" | "createdAt">) => Promise<Task>;
   payTask: (taskId: string) => Promise<void>;
   acceptTask: (taskId: string) => Promise<void>;
@@ -33,6 +35,7 @@ const STORAGE_KEYS = {
   CONVERSATIONS: "@citytasks_conversations",
   MESSAGES: "@citytasks_messages",
   RATINGS: "@citytasks_ratings",
+  HELPER_MODE: "@citytasks_helper_mode",
 };
 
 function generateId(): string {
@@ -42,6 +45,7 @@ function generateId(): string {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isHelperMode, setIsHelperMode] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
@@ -53,12 +57,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      const [userData, tasksData, convsData, msgsData, ratingsData] = await Promise.all([
+      const [userData, tasksData, convsData, msgsData, ratingsData, helperModeData] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.USER),
         AsyncStorage.getItem(STORAGE_KEYS.TASKS),
         AsyncStorage.getItem(STORAGE_KEYS.CONVERSATIONS),
         AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
         AsyncStorage.getItem(STORAGE_KEYS.RATINGS),
+        AsyncStorage.getItem(STORAGE_KEYS.HELPER_MODE),
       ]);
 
       if (userData) setUser(JSON.parse(userData));
@@ -66,6 +71,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (convsData) setConversations(JSON.parse(convsData));
       if (msgsData) setMessages(JSON.parse(msgsData));
       if (ratingsData) setRatings(JSON.parse(ratingsData));
+      if (helperModeData) setIsHelperMode(JSON.parse(helperModeData));
 
       if (isSupabaseAvailable) {
         syncWithSupabase();
@@ -122,6 +128,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error saving ratings:", error);
     }
+  };
+
+  const saveHelperMode = async (helperMode: boolean) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.HELPER_MODE, JSON.stringify(helperMode));
+    } catch (error) {
+      console.error("Error saving helper mode:", error);
+    }
+  };
+
+  const toggleHelperMode = async () => {
+    const newHelperMode = !isHelperMode;
+    setIsHelperMode(newHelperMode);
+    await saveHelperMode(newHelperMode);
   };
 
   const login = async (name: string, email: string, role: UserRole) => {
@@ -336,6 +356,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
+        isHelperMode,
         tasks,
         conversations,
         messages,
@@ -343,6 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         switchRole,
+        toggleHelperMode,
         createTask,
         payTask,
         acceptTask,

@@ -13,25 +13,25 @@ const AVATAR_COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
-  const { user, tasks, logout, switchRole } = useApp();
+  const { user, tasks, logout, isHelperMode, toggleHelperMode } = useApp();
 
   const isWorker = user?.role === "worker";
   
-  const completedTasks = isWorker
+  const completedTasks = isHelperMode
     ? tasks.filter(task => task.workerId === user?.id && task.status === "completed")
     : tasks.filter(task => task.customerId === user?.id && task.status === "completed");
 
-  const totalEarnings = isWorker
+  const totalEarnings = isHelperMode
     ? completedTasks.reduce((sum, task) => sum + task.price * (1 - PLATFORM_FEE_PERCENT), 0)
     : completedTasks.reduce((sum, task) => sum + task.price * (1 + PLATFORM_FEE_PERCENT), 0);
 
-  const handleSwitchRole = () => {
+  const handleSwitchMode = () => {
     Alert.alert(
-      "Switch Role",
-      `Switch to ${isWorker ? "Customer" : "Helper"} mode?`,
+      "Switch View",
+      `Switch to ${isHelperMode ? "Customer" : "Helper"} view?`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Switch", onPress: switchRole },
+        { text: "Switch", onPress: toggleHelperMode },
       ]
     );
   };
@@ -60,10 +60,10 @@ export default function ProfileScreen() {
         <ThemedText type="h2" style={styles.name}>
           {user?.name || "User"}
         </ThemedText>
-        <View style={[styles.roleBadge, { backgroundColor: isWorker ? theme.secondary : theme.primary }]}>
-          <Feather name={isWorker ? "tool" : "briefcase"} size={14} color="#FFFFFF" />
+        <View style={[styles.roleBadge, { backgroundColor: isHelperMode ? theme.secondary : theme.primary }]}>
+          <Feather name={isHelperMode ? "tool" : "briefcase"} size={14} color="#FFFFFF" />
           <ThemedText type="caption" style={styles.roleBadgeText}>
-            {isWorker ? "Helper" : "Customer"}
+            {isHelperMode ? "Helper" : "Customer"}
           </ThemedText>
         </View>
       </View>
@@ -74,7 +74,7 @@ export default function ProfileScreen() {
             {completedTasks.length}
           </ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {isWorker ? "Jobs Done" : "Tasks Posted"}
+            {isHelperMode ? "Jobs Done" : "Tasks Posted"}
           </ThemedText>
         </View>
         <View style={[styles.statItem, { backgroundColor: theme.backgroundDefault }]}>
@@ -82,7 +82,7 @@ export default function ProfileScreen() {
             ${totalEarnings.toFixed(0)}
           </ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {isWorker ? "Earned" : "Spent"}
+            {isHelperMode ? "Earned" : "Spent"}
           </ThemedText>
         </View>
       </View>
@@ -93,7 +93,7 @@ export default function ProfileScreen() {
         </ThemedText>
         
         <Pressable
-          onPress={handleSwitchRole}
+          onPress={handleSwitchMode}
           style={({ pressed }) => [
             styles.menuItem,
             { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
@@ -103,9 +103,9 @@ export default function ProfileScreen() {
             <Feather name="repeat" size={20} color={theme.secondary} />
           </View>
           <View style={styles.menuContent}>
-            <ThemedText type="body">Switch to {isWorker ? "Customer" : "Helper"}</ThemedText>
+            <ThemedText type="body">Switch to {isHelperMode ? "Customer" : "Helper"}</ThemedText>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              {isWorker ? "Post tasks and get help" : "Accept jobs and earn money"}
+              {isHelperMode ? "Post tasks and get help" : "Accept jobs and earn money"}
             </ThemedText>
           </View>
           <Feather name="chevron-right" size={20} color={theme.textSecondary} />

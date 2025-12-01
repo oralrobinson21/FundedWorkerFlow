@@ -49,9 +49,7 @@ function CustomerFAB() {
 
 export default function MainTabNavigator() {
   const { theme, isDark } = useTheme();
-  const { user } = useApp();
-  
-  const isWorker = user?.role === "worker";
+  const { isHelperMode } = useApp();
 
   return (
     <View style={styles.container}>
@@ -77,9 +75,9 @@ export default function MainTabNavigator() {
           name="HomeTab"
           component={HomeStackNavigator}
           options={{
-            title: isWorker ? "Jobs" : "Home",
+            title: isHelperMode ? "Jobs" : "Home",
             tabBarIcon: ({ color, size }) => (
-              <Feather name={isWorker ? "briefcase" : "home"} size={size} color={color} />
+              <Feather name={isHelperMode ? "briefcase" : "home"} size={size} color={color} />
             ),
           }}
         />
@@ -97,7 +95,7 @@ export default function MainTabNavigator() {
           name="ActivityTab"
           component={ActivityStackNavigator}
           options={{
-            title: isWorker ? "My Jobs" : "Activity",
+            title: isHelperMode ? "My Jobs" : "Activity",
             tabBarIcon: ({ color, size }) => (
               <Feather name="activity" size={size} color={color} />
             ),
@@ -115,7 +113,7 @@ export default function MainTabNavigator() {
         />
       </Tab.Navigator>
       
-      {!isWorker ? <CustomerFAB /> : null}
+      {!isHelperMode ? <CustomerFAB /> : null}
     </View>
   );
 }
