@@ -1,0 +1,244 @@
+Got it — you want a true request/offer system where:
+	•	A customer posts a job request for free
+	•	Helpers send offers/notes
+	•	The customer chooses a helper
+	•	ONLY THEN money is charged
+	•	The job officially becomes active and moves to the acceptance/working stage
+
+This is a major improvement.
+Here is the full system rewritten clearly and ready to copy-paste into your builder.
+
+⸻
+
+✅ Updated System: Request → Offers → Accept → Charge → Start Job
+
+Below is the complete flow and the backend changes required.
+
+⸻
+
+🚦 1. Posting a Job = FREE (no card charged yet)
+
+Customer fills out:
+	•	Title
+	•	Description
+	•	Category
+	•	Zip code (required)
+	•	Area / neighborhood (optional)
+	•	Price they’re willing to pay
+	•	Full address (still hidden until helper is chosen)
+
+System stores the job with:
+
+status = "requested"
+
+No helper assigned yet.
+
+No money charged yet.
+
+Helpers cannot accept it yet — they can only send offers.
+
+⸻
+
+🧾 2. Helpers Send Offers (with a note/message)
+
+For every job with:
+
+status = "requested"
+
+Helpers can tap “Send Offer” and fill:
+	•	A short note (required)
+	•	Optional proposed price (if you allow bidding)
+	•	Optional photo if needed for clarity
+
+This creates a JobOffer entry:
+
+jobOffer {
+  id
+  taskId
+  helperId
+  note
+  proposedPrice (optional)
+  createdAt
+  status = "pending"
+}
+
+The poster sees all incoming offers.
+
+⸻
+
+👉 3. Customer Chooses a Helper
+
+Once the customer picks a helper:
+	•	They tap “Choose Helper”
+	•	Then they are asked to enter payment info
+	•	Payment is NOT captured yet, only authorized
+
+Stripe Setup:
+	•	Use Stripe Payment Intent with capture_method=manual
+	•	Authorizes funds
+	•	Does NOT charge yet
+	•	You capture the payment when job is marked completed
+	•	OR capture partial upfront (optional)
+
+After payment authorization:
+	•	Task changes to:
+
+status = "accepted"
+helperId = chosenHelper.id
+acceptedAt = now
+
+	•	A chat thread is created
+	•	Full address is shown to that helper only
+	•	Other helper offers are marked:
+
+status = "declined"
+
+
+⸻
+
+💳 4. Only charge AFTER job is assigned
+
+Nothing is charged when the post is created.
+
+Charge timeline:
+	1.	Poster selects helper → Stripe authorizes the amount
+	2.	Job is completed + proof verified → Stripe captures the payment
+	3.	Your platform keeps 10% or 12%
+	4.	Stripe payout releases money to helper’s external account
+
+⸻
+
+🛠 5. Job Lifecycle (Rewritten)
+
+Requested
+
+Job posted, waiting for helper offers.
+
+Offers
+
+Helpers send notes, optional pricing.
+
+Accepted
+
+Poster selects helper and payment method is authorized.
+
+In Progress
+
+Helper sees full address, starts job.
+
+Completed
+
+Helper uploads proof → Poster approves (or system auto-approves) → Stripe captures payment.
+
+Paid Out
+
+Helper receives payout (minus your fees).
+
+Canceled
+
+Poster cancels before choosing helper = FREE
+Poster cancels after assigning helper (optional rules)
+
+⸻
+
+🧱 6. Required New Tables
+
+JobOffers
+
+{
+  id,
+  taskId,
+  helperId,
+  note,
+  proposedPrice,
+  status ("pending" | "declined" | "accepted"),
+  createdAt
+}
+
+Payments
+
+{
+  id,
+  taskId,
+  paymentIntentId,
+  amount,
+  status ("authorized" | "captured" | "refunded" | "failed"),
+  createdAt
+}
+
+You don’t need to store card data — Stripe handles that.
+
+⸻
+
+🔒 7. Privacy Rules Stay the Same
+
+Helpers DO NOT see the exact address until:
+	•	Customer selects them
+	•	Payment is authorized
+	•	Job status becomes accepted
+
+⸻
+
+💬 8. Chat Logic Still Works
+
+Chat thread created only after a helper is chosen.
+
+Chat auto-deletes after 3 days.
+
+Proof image still required for “Mark Completed”.
+
+⸻
+
+💸 9. Fees Still Apply (10% or 12%)
+
+Example for $30:
+	•	Helper receives $26.40 if you use 12%
+	•	You earn $3.60
+	•	Stripe fees deducted only when a payment is captured
+	•	Nothing is charged during job request/offers phase
+
+⸻
+
+🧍‍♂️ YOU asked:
+
+“Do you think this is fair or should I do 16%?”
+
+My answer:
+	•	For low-value tasks: 10%
+	•	For mid-value tasks ($30–$100): 12%
+	•	For premium services: you can go up to 15–18%
+
+But starting with 10–12% is the sweet spot for growth.
+16% is too high for a new marketplace unless you offer insurance & instant payouts.
+
+⸻
+
+📌 Final Notes to Your Developer / Builder
+
+(Paste this part into your other agent)
+
+ADD THESE:
+	1.	Posts are completely free.
+	2.	Helpers send offers with notes.
+	3.	Customer authorizes payment ONLY after choosing a helper.
+	4.	The selected helper gets full address.
+	5.	Stripe payment is only captured after job completion.
+	6.	Store job offers in JobOffers table.
+	7.	Store payment intent in Payments table.
+	8.	All other helper offers become declined automatically.
+	9.	Job cannot start until payment authorization is successful.
+	10.	Chat is created only after helper selection.
+	11.	Chat is only between poster + chosen helper.
+	12.	Chat auto-deletes after 3 days.
+	13.	Proof photo required before completion.
+	14.	Platform fee is applied only at payment capture.
+
+⸻
+
+If you want, I can now generate:
+
+✅ A full step-by-step user flow
+✅ UI mockups
+✅ Database schema SQL
+✅ Stripe payment flow code
+Just tell me which one you want next.

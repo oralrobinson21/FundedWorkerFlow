@@ -1,20 +1,25 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, Task, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode } from "@/types";
+import { User, Task, JobOffer, Payment, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode } from "@/types";
 
 interface AppContextType {
   user: User | null;
   isLoading: boolean;
   userMode: UserMode;
   tasks: Task[];
+  jobOffers: JobOffer[];
+  payments: Payment[];
   chatThreads: ChatThread[];
   chatMessages: Record<string, ChatMessage[]>;
   supportTickets: SupportTicket[];
   login: (name: string, phone?: string, defaultZipCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   setUserMode: (mode: UserMode) => Promise<void>;
-  createTask: (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode">) => Promise<Task>;
-  acceptTask: (taskId: string) => Promise<void>;
+  createTask: (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode" | "status">) => Promise<Task>;
+  sendOffer: (taskId: string, note: string, proposedPrice?: number) => Promise<void>;
+  chooseHelper: (taskId: string, offerId: string) => Promise<void>;
+  authorizePayment: (taskId: string, paymentIntentId: string, amount: number) => Promise<void>;
+  capturePayment: (taskId: string) => Promise<void>;
   completeTask: (taskId: string) => Promise<void>;
   cancelTask: (taskId: string, canceledBy: "poster" | "helper") => Promise<void>;
   disputeTask: (taskId: string) => Promise<void>;
@@ -29,6 +34,8 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   USER: "@citytasks_user",
   TASKS: "@citytasks_tasks",
+  JOB_OFFERS: "@citytasks_job_offers",
+  PAYMENTS: "@citytasks_payments",
   CHAT_THREADS: "@citytasks_chat_threads",
   CHAT_MESSAGES: "@citytasks_chat_messages",
   SUPPORT_TICKETS: "@citytasks_support_tickets",
@@ -44,6 +51,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [userMode, setUserModeState] = useState<UserMode>("poster");
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [jobOffers, setJobOffers] = useState<JobOffer[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
@@ -54,9 +63,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      const [userData, tasksData, threadsData, msgsData, ticketsData, modeData] = await Promise.all([
+      const [userData, tasksData, offersData, paymentsData, threadsData, msgsData, ticketsData, modeData] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.USER),
         AsyncStorage.getItem(STORAGE_KEYS.TASKS),
+        AsyncStorage.getItem(STORAGE_KEYS.JOB_OFFERS),
+        AsyncStorage.getItem(STORAGE_KEYS.PAYMENTS),
         AsyncStorage.getItem(STORAGE_KEYS.CHAT_THREADS),
         AsyncStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES),
         AsyncStorage.getItem(STORAGE_KEYS.SUPPORT_TICKETS),
@@ -65,6 +76,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (userData) setUser(JSON.parse(userData));
       if (tasksData) setTasks(JSON.parse(tasksData));
+      if (offersData) setJobOffers(JSON.parse(offersData));
+      if (paymentsData) setPayments(JSON.parse(paymentsData));
       if (threadsData) setChatThreads(JSON.parse(threadsData));
       if (msgsData) setChatMessages(JSON.parse(msgsData));
       if (ticketsData) setSupportTickets(JSON.parse(ticketsData));
@@ -99,42 +112,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const saveConversations = async (convsData: Conversation[]) => {
+  const saveJobOffers = async (offersData: JobOffer[]) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(convsData));
+      await AsyncStorage.setItem(STORAGE_KEYS.JOB_OFFERS, JSON.stringify(offersData));
     } catch (error) {
-      console.error("Error saving conversations:", error);
+      console.error("Error saving job offers:", error);
     }
   };
 
-  const saveMessages = async (msgsData: Record<string, Message[]>) => {
+  const savePayments = async (paymentsData: Payment[]) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgsData));
+      await AsyncStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(paymentsData));
     } catch (error) {
-      console.error("Error saving messages:", error);
+      console.error("Error saving payments:", error);
     }
   };
 
-  const saveRatings = async (ratingsData: Rating[]) => {
+  const saveChatThreads = async (threadsData: ChatThread[]) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.RATINGS, JSON.stringify(ratingsData));
+      await AsyncStorage.setItem(STORAGE_KEYS.CHAT_THREADS, JSON.stringify(threadsData));
     } catch (error) {
-      console.error("Error saving ratings:", error);
+      console.error("Error saving chat threads:", error);
     }
   };
 
-  const saveHelperMode = async (helperMode: boolean) => {
+  const saveChatMessages = async (msgsData: Record<string, ChatMessage[]>) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.HELPER_MODE, JSON.stringify(helperMode));
+      await AsyncStorage.setItem(STORAGE_KEYS.CHAT_MESSAGES, JSON.stringify(msgsData));
     } catch (error) {
-      console.error("Error saving helper mode:", error);
+      console.error("Error saving chat messages:", error);
     }
   };
 
-  const toggleHelperMode = async () => {
-    const newHelperMode = !isHelperMode;
-    setIsHelperMode(newHelperMode);
-    await saveHelperMode(newHelperMode);
+  const saveSupportTickets = async (ticketsData: SupportTicket[]) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.SUPPORT_TICKETS, JSON.stringify(ticketsData));
+    } catch (error) {
+      console.error("Error saving support tickets:", error);
+    }
+  };
+
+  const saveUserMode = async (mode: UserMode) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_MODE, JSON.stringify(mode));
+    } catch (error) {
+      console.error("Error saving user mode:", error);
+    }
   };
 
   const login = async (name: string, phone?: string, defaultZipCode?: string) => {
@@ -156,14 +179,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setUserMode = async (mode: UserMode) => {
     setUserModeState(mode);
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.USER_MODE, JSON.stringify(mode));
-    } catch (error) {
-      console.error("Error saving user mode:", error);
-    }
+    await saveUserMode(mode);
   };
 
-  const createTask = async (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode">): Promise<Task> => {
+  const createTask = async (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode" | "status">): Promise<Task> => {
     if (!user) throw new Error("User not logged in");
     
     const newTask: Task = {
@@ -172,7 +191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       posterId: user.id,
       posterName: user.name,
       confirmationCode: generateConfirmationCode(),
-      status: "open",
+      status: "requested",
       createdAt: new Date().toISOString(),
     };
     
@@ -182,92 +201,109 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return newTask;
   };
 
-  const payTask = async (taskId: string) => {
-    const updatedTasks = tasks.map(task =>
-      task.id === taskId ? { ...task, status: "paid_waiting" as TaskStatus } : task
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
-  };
-
-  const acceptTask = async (taskId: string) => {
-    if (!user) return;
+  const sendOffer = async (taskId: string, note: string, proposedPrice?: number) => {
+    if (!user) throw new Error("User not logged in");
     
     const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    
+    if (!task) throw new Error("Task not found");
+
+    const newOffer: JobOffer = {
+      id: generateId(),
+      taskId,
+      helperId: user.id,
+      helperName: user.name,
+      note,
+      proposedPrice,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedOffers = [...jobOffers, newOffer];
+    setJobOffers(updatedOffers);
+    await saveJobOffers(updatedOffers);
+
     const updatedTasks = tasks.map(t =>
-      t.id === taskId ? { ...t, status: "assigned" as TaskStatus, workerId: user.id, workerName: user.name } : t
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
-
-    const existingConv = conversations.find(c => c.taskId === taskId);
-    if (!existingConv) {
-      const newConversation: Conversation = {
-        id: generateId(),
-        taskId,
-        taskTitle: task.title,
-        otherUserId: task.customerId,
-        otherUserName: task.customerName,
-        otherUserAvatarIndex: Math.floor(Math.random() * 6),
-        lastMessage: "Job accepted! I'm on my way.",
-        lastMessageTime: new Date().toISOString(),
-        unreadCount: 0,
-      };
-
-      const workerConversation: Conversation = {
-        ...newConversation,
-        id: generateId(),
-        otherUserId: user.id,
-        otherUserName: user.name,
-        otherUserAvatarIndex: user.avatarIndex,
-      };
-
-      const updatedConvs = [...conversations, newConversation, workerConversation];
-      setConversations(updatedConvs);
-      await saveConversations(updatedConvs);
-
-      const initialMessage: Message = {
-        id: generateId(),
-        taskId,
-        senderId: user.id,
-        senderName: user.name,
-        content: "Job accepted! I'm on my way.",
-        timestamp: new Date().toISOString(),
-        read: false,
-      };
-
-      const updatedMessages = { ...messages, [taskId]: [initialMessage] };
-      setMessages(updatedMessages);
-      await saveMessages(updatedMessages);
-    }
-  };
-
-  const markJobDone = async (taskId: string, beforePhotoUrl?: string, afterPhotoUrl?: string) => {
-    const updatedTasks = tasks.map(task =>
-      task.id === taskId 
-        ? { 
-            ...task, 
-            status: "worker_marked_done" as TaskStatus,
-            beforePhotoUrl,
-            afterPhotoUrl,
-          } 
-        : task
+      t.id === taskId && t.status === "requested" ? { ...t, status: "offers_in" as TaskStatus } : t
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
   };
 
-  const approveJob = async (taskId: string) => {
+  const chooseHelper = async (taskId: string, offerId: string) => {
+    if (!user) throw new Error("User not logged in");
+
+    const offer = jobOffers.find(o => o.id === offerId);
+    if (!offer) throw new Error("Offer not found");
+
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) throw new Error("Task not found");
+
+    const updatedTasks = tasks.map(t =>
+      t.id === taskId ? { ...t, status: "accepted" as TaskStatus, helperId: offer.helperId, helperName: offer.helperName, acceptedAt: new Date().toISOString() } : t
+    );
+    setTasks(updatedTasks);
+    await saveTasks(updatedTasks);
+
+    const updatedOffers = jobOffers.map(o =>
+      o.taskId === taskId && o.id !== offerId ? { ...o, status: "declined" as any } : o.id === offerId ? { ...o, status: "accepted" as any } : o
+    );
+    setJobOffers(updatedOffers);
+    await saveJobOffers(updatedOffers);
+
+    const newThread = await createChatThread(taskId, task.posterId, offer.helperId);
+  };
+
+  const authorizePayment = async (taskId: string, paymentIntentId: string, amount: number) => {
+    const newPayment: Payment = {
+      id: generateId(),
+      taskId,
+      paymentIntentId,
+      amount,
+      status: "authorized",
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedPayments = [...payments, newPayment];
+    setPayments(updatedPayments);
+    await savePayments(updatedPayments);
+  };
+
+  const capturePayment = async (taskId: string) => {
+    const payment = payments.find(p => p.taskId === taskId);
+    if (!payment) throw new Error("Payment not found");
+
+    const updatedPayments = payments.map(p =>
+      p.taskId === taskId ? { ...p, status: "captured" as PaymentStatus } : p
+    );
+    setPayments(updatedPayments);
+    await savePayments(updatedPayments);
+  };
+
+  const completeTask = async (taskId: string) => {
     const updatedTasks = tasks.map(task =>
       task.id === taskId ? { ...task, status: "completed" as TaskStatus, completedAt: new Date().toISOString() } : task
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
+    
+    await capturePayment(taskId);
+
+    const updatedPayments = payments.map(p =>
+      p.taskId === taskId ? { ...p, status: "captured" as PaymentStatus } : p
+    );
+    setPayments(updatedPayments);
+    await savePayments(updatedPayments);
   };
 
-  const disputeJob = async (taskId: string) => {
+  const cancelTask = async (taskId: string, canceledBy: "poster" | "helper") => {
+    const updatedTasks = tasks.map(task =>
+      task.id === taskId ? { ...task, status: "canceled" as TaskStatus, canceledAt: new Date().toISOString(), canceledBy } : task
+    );
+    setTasks(updatedTasks);
+    await saveTasks(updatedTasks);
+  };
+
+  const disputeTask = async (taskId: string) => {
     const updatedTasks = tasks.map(task =>
       task.id === taskId ? { ...task, status: "disputed" as TaskStatus } : task
     );
@@ -275,74 +311,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveTasks(updatedTasks);
   };
 
-  const sendMessage = async (taskId: string, content: string) => {
-    if (!user) return;
+  const sendChatMessage = async (threadId: string, text?: string, imageUrl?: string, isProof: boolean = false) => {
+    if (!user) throw new Error("User not logged in");
 
-    const newMessage: Message = {
+    const newMessage: ChatMessage = {
       id: generateId(),
-      taskId,
+      threadId,
       senderId: user.id,
       senderName: user.name,
-      content,
-      timestamp: new Date().toISOString(),
-      read: false,
-    };
-
-    const taskMessages = messages[taskId] || [];
-    const updatedMessages = { ...messages, [taskId]: [...taskMessages, newMessage] };
-    setMessages(updatedMessages);
-    await saveMessages(updatedMessages);
-
-    const updatedConvs = conversations.map(conv =>
-      conv.taskId === taskId
-        ? { ...conv, lastMessage: content, lastMessageTime: newMessage.timestamp }
-        : conv
-    );
-    setConversations(updatedConvs);
-    await saveConversations(updatedConvs);
-  };
-
-  const markConversationRead = async (conversationId: string) => {
-    const updatedConvs = conversations.map(conv =>
-      conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv
-    );
-    setConversations(updatedConvs);
-    await saveConversations(updatedConvs);
-  };
-
-  const createRating = async (taskId: string, ratedUserId: string, score: number, review?: string) => {
-    if (!user) return;
-
-    const newRating: Rating = {
-      id: generateId(),
-      taskId,
-      ratedUserId,
-      ratingUserId: user.id,
-      ratingUserName: user.name,
-      score,
-      review,
+      text,
+      imageUrl,
+      isProof,
       createdAt: new Date().toISOString(),
     };
 
-    const updatedRatings = [...ratings, newRating];
-    setRatings(updatedRatings);
-    await saveRatings(updatedRatings);
+    const threadMessages = chatMessages[threadId] || [];
+    const updatedMessages = { ...chatMessages, [threadId]: [...threadMessages, newMessage] };
+    setChatMessages(updatedMessages);
+    await saveChatMessages(updatedMessages);
+  };
 
-    if (isSupabaseAvailable) {
-      await ratingQueries.createRating(newRating);
-    }
+  const createChatThread = async (taskId: string, posterId: string, helperId: string): Promise<ChatThread> => {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 3);
+
+    const newThread: ChatThread = {
+      id: generateId(),
+      taskId,
+      posterId,
+      helperId,
+      createdAt: new Date().toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      isClosed: false,
+    };
+
+    const updatedThreads = [...chatThreads, newThread];
+    setChatThreads(updatedThreads);
+    await saveChatThreads(updatedThreads);
+    return newThread;
+  };
+
+  const createSupportTicket = async (subject: string, message: string, taskId?: string) => {
+    if (!user) throw new Error("User not logged in");
+
+    const newTicket: SupportTicket = {
+      id: generateId(),
+      userId: user.id,
+      taskId,
+      subject,
+      message,
+      status: "open",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updatedTickets = [...supportTickets, newTicket];
+    setSupportTickets(updatedTickets);
+    await saveSupportTickets(updatedTickets);
   };
 
   const syncWithSupabase = async () => {
-    if (!isSupabaseAvailable) return;
-    try {
-      const { data: tasksData } = await taskQueries.getTasks();
-      if (tasksData && tasksData.length > 0) {
-        setTasks(tasksData);
-      }
-    } catch (error) {
-      console.error("Error syncing with Supabase:", error);
-    }
+    // TODO: Implement Supabase sync for new data model
   };
 
   return (
@@ -350,24 +379,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
-        isHelperMode,
+        userMode,
         tasks,
-        conversations,
-        messages,
-        ratings,
+        jobOffers,
+        payments,
+        chatThreads,
+        chatMessages,
+        supportTickets,
         login,
         logout,
-        switchRole,
-        toggleHelperMode,
+        setUserMode,
         createTask,
-        payTask,
-        acceptTask,
-        markJobDone,
-        approveJob,
-        disputeJob,
-        sendMessage,
-        markConversationRead,
-        createRating,
+        sendOffer,
+        chooseHelper,
+        authorizePayment,
+        capturePayment,
+        completeTask,
+        cancelTask,
+        disputeTask,
+        sendChatMessage,
+        createChatThread,
+        createSupportTicket,
         syncWithSupabase,
       }}
     >

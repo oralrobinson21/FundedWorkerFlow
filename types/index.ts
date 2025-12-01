@@ -1,7 +1,9 @@
 export type UserMode = "poster" | "helper";
-export type TaskStatus = "open" | "accepted" | "completed" | "canceled" | "disputed";
+export type TaskStatus = "requested" | "offers_in" | "accepted" | "in_progress" | "completed" | "paid_out" | "canceled" | "disputed";
 export type TaskCategory = "Cleaning" | "Moving" | "Handyman" | "Groceries" | "Other";
 export type SupportTicketStatus = "open" | "in_review" | "closed";
+export type JobOfferStatus = "pending" | "declined" | "accepted";
+export type PaymentStatus = "authorized" | "captured" | "refunded" | "failed";
 
 export interface User {
   id: string;
@@ -32,6 +34,26 @@ export interface Task {
   completedAt?: string;
   canceledAt?: string;
   canceledBy?: "poster" | "helper";
+}
+
+export interface JobOffer {
+  id: string;
+  taskId: string;
+  helperId: string;
+  helperName: string;
+  note: string;
+  proposedPrice?: number;
+  status: JobOfferStatus;
+  createdAt: string;
+}
+
+export interface Payment {
+  id: string;
+  taskId: string;
+  paymentIntentId: string;
+  amount: number;
+  status: PaymentStatus;
+  createdAt: string;
 }
 
 export interface ChatThread {
