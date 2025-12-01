@@ -7,6 +7,9 @@ import CreateTaskScreen from "@/screens/CreateTaskScreen";
 import TaskDetailScreen from "@/screens/TaskDetailScreen";
 import ChatScreen from "@/screens/ChatScreen";
 import PaymentScreen from "@/screens/PaymentScreen";
+import CompletionPhotoScreen from "@/screens/CompletionPhotoScreen";
+import ApprovalScreen from "@/screens/ApprovalScreen";
+import RatingScreen from "@/screens/RatingScreen";
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
 import { getCommonScreenOptions } from "@/navigation/screenOptions";
@@ -60,6 +63,27 @@ export default function RootNavigator() {
             options={{
               presentation: "modal",
               animation: "slide_from_bottom",
+            }}
+          />
+          <Stack.Screen
+            name="CompletionPhoto"
+            component={CompletionPhotoScreen}
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="Approval"
+            component={ApprovalScreen}
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="Rating"
+            component={RatingScreen}
+            options={{
+              animation: "slide_from_right",
             }}
           />
         </>

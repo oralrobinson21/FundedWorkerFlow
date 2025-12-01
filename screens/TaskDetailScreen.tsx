@@ -50,21 +50,12 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
     );
   };
 
-  const handleCompleteTask = () => {
-    Alert.alert(
-      "Mark as Complete",
-      "Confirm that this task has been completed?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Complete",
-          onPress: async () => {
-            await completeTask(task.id);
-            Alert.alert("Task Completed", "Payment will be released to the helper.");
-          },
-        },
-      ]
-    );
+  const handleMarkJobDone = () => {
+    navigation.navigate("CompletionPhoto", { task });
+  };
+
+  const handleApproveWork = () => {
+    navigation.navigate("Approval", { task });
   };
 
   const handleMessage = () => {
@@ -99,8 +90,12 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
         return "Funded - Waiting for helper";
       case "assigned":
         return "Helper assigned";
+      case "worker_marked_done":
+        return "Waiting for approval";
       case "completed":
         return "Completed";
+      case "disputed":
+        return "Disputed";
       default:
         return task.status;
     }
@@ -248,7 +243,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
             
             {isCustomer ? (
               <Pressable
-                onPress={handleCompleteTask}
+                onPress={handleApproveWork}
                 style={({ pressed }) => [
                   styles.actionButton,
                   { backgroundColor: theme.success, opacity: pressed ? 0.9 : 1, flex: 1 },
@@ -256,10 +251,70 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
               >
                 <Feather name="check" size={20} color="#FFFFFF" />
                 <ThemedText type="body" style={styles.actionButtonText}>
-                  Mark Complete
+                  Awaiting Completion
                 </ThemedText>
               </Pressable>
-            ) : null}
+            ) : (
+              <Pressable
+                onPress={handleMarkJobDone}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1, flex: 1 },
+                ]}
+              >
+                <Feather name="camera" size={20} color="#FFFFFF" />
+                <ThemedText type="body" style={styles.actionButtonText}>
+                  Mark Done
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
+        ) : null}
+
+        {task.status === "worker_marked_done" && isCustomer && isMyTask ? (
+          <View style={styles.buttonRow}>
+            <Pressable
+              onPress={handleMessage}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                { backgroundColor: theme.backgroundDefault, opacity: pressed ? 0.9 : 1 },
+              ]}
+            >
+              <Feather name="message-circle" size={20} color={theme.primary} />
+              <ThemedText type="body" style={{ color: theme.primary, fontWeight: "600" }}>
+                Message
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={handleApproveWork}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1, flex: 1 },
+              ]}
+            >
+              <Feather name="eye" size={20} color="#FFFFFF" />
+              <ThemedText type="body" style={styles.actionButtonText}>
+                Review Work
+              </ThemedText>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {task.status === "disputed" && isMyTask ? (
+          <View style={styles.buttonRow}>
+            <Pressable
+              onPress={handleMessage}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1, flex: 1 },
+              ]}
+            >
+              <Feather name="message-circle" size={20} color="#FFFFFF" />
+              <ThemedText type="body" style={styles.actionButtonText}>
+                Discuss with {isCustomer ? "Helper" : "Customer"}
+              </ThemedText>
+            </Pressable>
           </View>
         ) : null}
 

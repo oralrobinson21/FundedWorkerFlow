@@ -31,12 +31,26 @@ export function StatusBadge({ status, size = "small" }: StatusBadgeProps) {
           textColor: theme.assignedText,
           icon: "user" as const,
         };
+      case "worker_marked_done":
+        return {
+          label: "Reviewing",
+          backgroundColor: theme.assigned,
+          textColor: theme.assignedText,
+          icon: "eye" as const,
+        };
       case "completed":
         return {
           label: "Done",
           backgroundColor: theme.completed,
           textColor: theme.completedText,
           icon: "check" as const,
+        };
+      case "disputed":
+        return {
+          label: "Disputed",
+          backgroundColor: "#FFA500",
+          textColor: "#FFFFFF",
+          icon: "alert-circle" as const,
         };
       case "unpaid":
       default:
