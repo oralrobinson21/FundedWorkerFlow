@@ -6,7 +6,8 @@ export type JobOfferStatus = "pending" | "declined" | "accepted";
 
 export interface User {
   id: string;
-  name: string;
+  email: string;
+  name?: string;
   phone?: string;
   defaultZipCode?: string;
   accountNumber: string;
@@ -87,4 +88,8 @@ function generateConfirmationCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-export { generateConfirmationCode };
+function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+export { generateConfirmationCode, generateOTP };

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, Task, JobOffer, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode } from "@/types";
+import { User, Task, JobOffer, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode, generateOTP } from "@/types";
 
 interface AppContextType {
   user: User | null;
@@ -11,9 +11,13 @@ interface AppContextType {
   chatThreads: ChatThread[];
   chatMessages: Record<string, ChatMessage[]>;
   supportTickets: SupportTicket[];
-  login: (name: string, phone?: string, defaultZipCode?: string) => Promise<void>;
+  // Auth methods
+  sendOTPCode: (email: string) => Promise<{ success: boolean; message: string }>;
+  verifyOTPCode: (email: string, code: string) => Promise<{ success: boolean; user?: User; message: string }>;
+  updateUserProfile: (phone?: string, defaultZipCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   setUserMode: (mode: UserMode) => Promise<void>;
+  // Task methods
   createTask: (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode" | "status">) => Promise<Task>;
   sendOffer: (taskId: string, note: string, proposedPrice?: number) => Promise<void>;
   chooseHelper: (taskId: string, offerId: string) => Promise<void>;
@@ -36,7 +40,14 @@ const STORAGE_KEYS = {
   CHAT_MESSAGES: "@citytasks_chat_messages",
   SUPPORT_TICKETS: "@citytasks_support_tickets",
   USER_MODE: "@citytasks_user_mode",
+  OTP_CODES: "@citytasks_otp_codes",
 };
+
+interface StoredOTP {
+  email: string;
+  code: string;
+  expiresAt: number;
+}
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -51,6 +62,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [storedOTPs, setStoredOTPs] = useState<StoredOTP[]>([]);
 
   useEffect(() => {
     loadData();
@@ -58,7 +70,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      const [userData, tasksData, offersData, threadsData, msgsData, ticketsData, modeData] = await Promise.all([
+      const [userData, tasksData, offersData, threadsData, msgsData, ticketsData, modeData, otpData] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.USER),
         AsyncStorage.getItem(STORAGE_KEYS.TASKS),
         AsyncStorage.getItem(STORAGE_KEYS.JOB_OFFERS),
@@ -66,6 +78,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         AsyncStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES),
         AsyncStorage.getItem(STORAGE_KEYS.SUPPORT_TICKETS),
         AsyncStorage.getItem(STORAGE_KEYS.USER_MODE),
+        AsyncStorage.getItem(STORAGE_KEYS.OTP_CODES),
       ]);
 
       if (userData) setUser(JSON.parse(userData));
@@ -75,6 +88,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (msgsData) setChatMessages(JSON.parse(msgsData));
       if (ticketsData) setSupportTickets(JSON.parse(ticketsData));
       if (modeData) setUserModeState(JSON.parse(modeData) as UserMode);
+      if (otpData) setStoredOTPs(JSON.parse(otpData));
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -86,14 +100,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       if (userData) {
         await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
-        if (isSupabaseAvailable) {
-          await userQueries.createUser(userData);
-        }
       } else {
         await AsyncStorage.removeItem(STORAGE_KEYS.USER);
       }
     } catch (error) {
       console.error("Error saving user:", error);
+    }
+  };
+
+  const saveOTPs = async (otps: StoredOTP[]) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.OTP_CODES, JSON.stringify(otps));
+    } catch (error) {
+      console.error("Error saving OTPs:", error);
     }
   };
 
@@ -110,14 +129,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.setItem(STORAGE_KEYS.JOB_OFFERS, JSON.stringify(offersData));
     } catch (error) {
       console.error("Error saving job offers:", error);
-    }
-  };
-
-  const savePayments = async (paymentsData: Payment[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(paymentsData));
-    } catch (error) {
-      console.error("Error saving payments:", error);
     }
   };
 
@@ -151,6 +162,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error saving user mode:", error);
     }
+  };
+
+  const sendOTPCode = async (email: string): Promise<{ success: boolean; message: string }> => {
+    const code = generateOTP();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    const newOTP: StoredOTP = { email, code, expiresAt };
+    const updatedOTPs = storedOTPs.filter(otp => otp.email !== email || otp.expiresAt > Date.now());
+    updatedOTPs.push(newOTP);
+    setStoredOTPs(updatedOTPs);
+    await saveOTPs(updatedOTPs);
+    console.log(`[DEV] OTP Code for ${email}: ${code}`);
+    return { success: true, message: `Code sent to ${email}` };
+  };
+
+  const verifyOTPCode = async (email: string, code: string): Promise<{ success: boolean; user?: User; message: string }> => {
+    const otp = storedOTPs.find(o => o.email === email && o.code === code && o.expiresAt > Date.now());
+    if (!otp) {
+      return { success: false, message: "Invalid or expired code" };
+    }
+    const updatedOTPs = storedOTPs.filter(o => o.email !== email);
+    setStoredOTPs(updatedOTPs);
+    await saveOTPs(updatedOTPs);
+    const newUser: User = {
+      id: generateId(),
+      email,
+      accountNumber: generateId(),
+      createdAt: new Date().toISOString(),
+    };
+    setUser(newUser);
+    await saveUser(newUser);
+    return { success: true, user: newUser, message: "Logged in" };
+  };
+
+  const updateUserProfile = async (phone?: string, defaultZipCode?: string) => {
+    if (!user) throw new Error("User not logged in");
+    const updatedUser = { ...user, phone, defaultZipCode };
+    setUser(updatedUser);
+    await saveUser(updatedUser);
   };
 
   const login = async (name: string, phone?: string, defaultZipCode?: string) => {
@@ -365,7 +414,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         chatThreads,
         chatMessages,
         supportTickets,
-        login,
+        sendOTPCode,
+        verifyOTPCode,
+        updateUserProfile,
         logout,
         setUserMode,
         createTask,
