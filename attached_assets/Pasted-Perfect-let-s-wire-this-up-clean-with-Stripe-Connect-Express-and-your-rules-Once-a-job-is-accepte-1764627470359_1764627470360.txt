@@ -1,0 +1,385 @@
+Perfect, let’s wire this up clean with Stripe Connect Express and your rules:
+
+Once a job is accepted (and paid), it disappears from the queue and poster/helper can chat as long as they’re signed in.
+
+Below is a dev-ready blueprint you can paste straight into your builder/agent.
+
+⸻
+
+0. High-Level Flow (for the dev)
+	1.	User login (email OTP, as we discussed).
+	2.	Poster creates a job → status = "requested" (free).
+	3.	Helpers send offers (note, maybe price).
+	4.	Poster chooses a helper → payment required.
+	5.	Backend creates Stripe Checkout Session with:
+	•	Your platform fee (10–12%)
+	•	transfer_data.destination = helper.stripeAccountId
+	6.	Customer pays → Stripe webhook fires:
+	•	Mark job status = "accepted"
+	•	Create ChatThread
+	•	Remove job from helper queue (no longer visible in “open jobs” list)
+	7.	Helper & poster chat, see full address, do the job.
+	8.	Both confirm completion → mark job status = "completed".
+	9.	Stripe automatically pays helper on schedule (Express) and logs everything.
+
+⸻
+
+1. Environment Variables (Backend)
+
+Tell the dev to set:
+
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_CONNECT_CLIENT_ID=ca_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+PLATFORM_FEE_PERCENT=10   # or 12
+FRONTEND_URL=https://yourapp.com
+API_BASE_URL=https://api.yourapp.com
+
+(Use test keys in dev of course.)
+
+⸻
+
+2. Database / Types: Fields to Add
+
+User
+
+Add these fields:
+
+type User = {
+  id: string;
+  email: string;
+  name?: string;
+  phone?: string;
+  defaultZipCode?: string;
+  accountNumber: string;      // you already have this
+  stripeAccountId?: string;   // Connect Express account ID
+  payoutsEnabled?: boolean;   // from Stripe (charges_enabled / payouts_enabled)
+  createdAt: string;
+};
+
+Task (Job)
+
+Extend your Task type:
+
+type TaskStatus =
+  | "requested"   // job posted, no payment yet
+  | "accepted"    // payment done, helper chosen, chat unlocked
+  | "in_progress" // optional (if you want separate)
+  | "completed"   // both sides confirmed
+  | "canceled"
+  | "disputed";
+
+type Task = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  zipCode: string;
+  areaDescription?: string;
+  fullAddress?: string;
+  price: number;                       // total job price in app
+  status: TaskStatus;
+
+  posterId: string;
+  helperId?: string | null;
+
+  confirmationCode: string;
+  photosRequired: boolean;
+
+  // Stripe/payment-related:
+  stripeCheckoutSessionId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeChargeId?: string | null;
+  platformFeeAmount?: number | null;      // in cents
+  helperAmount?: number | null;           // in cents
+  paymentStatus?: "pending" | "paid" | "refunded" | "failed";
+
+  createdAt: string;
+  acceptedAt?: string | null;
+  completedAt?: string | null;
+  canceledAt?: string | null;
+  canceledBy?: "poster" | "helper" | null;
+};
+
+JobOffer (you already mostly have this)
+
+type JobOfferStatus = "pending" | "accepted" | "declined";
+
+type JobOffer = {
+  id: string;
+  taskId: string;
+  helperId: string;
+  note: string;
+  proposedPrice?: number | null;
+  status: JobOfferStatus;
+  createdAt: string;
+};
+
+
+⸻
+
+3. Stripe Connect Express – Helper Onboarding
+
+Helpers need a Stripe Connect account once to receive payouts.
+
+Endpoint: POST /api/stripe/connect/onboard
+
+Input: none (uses logged-in user)
+Flow:
+	1.	If user.stripeAccountId doesn’t exist:
+	•	Create stripe.accounts.create({ type: "express", ... })
+	•	Save stripeAccountId to user record.
+	2.	Create Stripe Account Link:
+
+const accountLink = await stripe.accountLinks.create({
+  account: user.stripeAccountId,
+  refresh_url: `${FRONTEND_URL}/payouts/onboarding/refresh`,
+  return_url: `${FRONTEND_URL}/payouts/onboarding/complete`,
+  type: "account_onboarding",
+});
+
+	3.	Return accountLink.url to frontend.
+
+Frontend:
+	•	If helper taps “Set up payouts” → call this endpoint → window.location = url.
+
+Once done, Stripe sets charges_enabled/payouts_enabled.
+You should sync that via a webhook (account.updated) and update payoutsEnabled on the user.
+
+⸻
+
+4. Payment Flow When Poster Chooses a Helper
+
+Rule You Want:
+
+Once job is accepted (paid), it’s cleared from queue and poster/helper can chat as long as they’re signed in.
+
+Endpoint: POST /api/tasks/:taskId/choose-helper
+
+Input:
+	•	taskId
+	•	helperId
+
+Backend Steps:
+	1.	Ensure:
+	•	Task status === "requested"
+	•	Helper has stripeAccountId and payoutsEnabled (or at least stripeAccountId)
+	2.	Calculate amounts in cents:
+
+const amount = Math.round(task.price * 100);
+const platformFeePercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || "10");
+const applicationFeeAmount = Math.round((platformFeePercent / 100) * amount);
+const helperAmount = amount - applicationFeeAmount;
+
+	3.	Create Stripe Checkout Session:
+
+Use Checkout for simplicity:
+
+const session = await stripe.checkout.sessions.create({
+  mode: "payment",
+  payment_intent_data: {
+    application_fee_amount: applicationFeeAmount,
+    transfer_data: {
+      destination: helperStripeAccountId, // from helper.user
+    },
+  },
+  line_items: [
+    {
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: task.title,
+          description: task.description,
+        },
+        unit_amount: amount,
+      },
+      quantity: 1,
+    },
+  ],
+  customer_email: poster.email,
+  metadata: {
+    taskId: task.id,
+    posterId: task.posterId,
+    helperId: helper.id,
+  },
+  success_url: `${FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+  cancel_url: `${FRONTEND_URL}/payment/cancel?task_id=${task.id}`,
+});
+
+	4.	Save on Task (but do not change status yet):
+
+task.stripeCheckoutSessionId = session.id;
+task.platformFeeAmount = applicationFeeAmount;
+task.helperAmount = helperAmount;
+// still status = "requested"
+
+	5.	Return session.url to frontend.
+
+Frontend:
+	•	After poster chooses helper, redirect them to session.url via Stripe.
+
+⸻
+
+5. Stripe Webhook – When Payment Succeeds
+
+Endpoint: POST /api/stripe/webhook
+
+Use raw body, verify with STRIPE_WEBHOOK_SECRET.
+
+Listen to:
+	•	checkout.session.completed
+
+Handler:
+
+if (event.type === "checkout.session.completed") {
+  const session = event.data.object;
+
+  const taskId = session.metadata.taskId;
+  const helperId = session.metadata.helperId;
+
+  // Lookup task
+  const task = await getTask(taskId);
+  if (!task) return;
+
+  // Get PaymentIntent + Charge
+  const paymentIntentId = session.payment_intent;
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const chargeId = paymentIntent.charges.data[0]?.id;
+
+  // Update task:
+  task.status = "accepted";                   // IMPORTANT
+  task.helperId = helperId;
+  task.acceptedAt = new Date().toISOString();
+  task.stripePaymentIntentId = paymentIntentId;
+  task.stripeChargeId = chargeId;
+  task.paymentStatus = "paid";
+
+  // Decline any other JobOffers for this task:
+  await declineOtherOffers(taskId, helperId);
+
+  // Create chat thread between poster + helper:
+  await createChatThread({
+    taskId,
+    posterId: task.posterId,
+    helperId,
+  });
+
+  await saveTask(task);
+}
+
+Result of webhook:
+	•	Job becomes accepted
+	•	It is removed from helper queue (status !== "requested" now)
+	•	Chat is created and unlocked
+	•	Full address can be shown to helper
+
+Frontend doesn’t trust URL alone; it reads updated task status from API/AppContext.
+
+⸻
+
+6. Queue Logic & Chat Unlock
+
+Queue (Job List for helpers)
+
+In JobListScreen for helpers, only show tasks where:
+
+task.status === "requested"
+
+Once webhook flips a task to "accepted", it vanishes from that list next refresh.
+
+Chat Access
+
+Chat screen should enforce:
+	•	Only accessible if:
+	•	task.status === "accepted" || "in_progress" || "completed" || "disputed"
+	•	currentUser.id is either posterId or helperId
+
+Full Address Visibility
+
+Display fullAddress only when:
+	•	task.status !== "requested" AND
+	•	currentUser.id is poster or helper
+
+So pre-payment, helpers see zip + area, but no full address.
+Post-payment (accepted) → they see full address and chat.
+
+⸻
+
+7. Marking Job Completed & Releasing Funds
+
+We’re using Stripe in a simple way: Checkout + Connect + application fee.
+
+By default:
+	•	When payment succeeds:
+	•	Your fee moves to your platform balance
+	•	Helper’s share goes to their Connect account balance
+	•	Stripe will automatically payout to helper based on its schedule
+
+To align with “both sides click confirm”:
+
+AppContext: completeTask(taskId)
+
+Steps:
+	1.	Verify:
+	•	Task status === "accepted" or "in_progress"
+	•	Proof photo exists if photosRequired = true
+	2.	Set:
+
+task.status = "completed";
+task.completedAt = new Date().toISOString();
+await saveTask(task);
+
+You don’t necessarily need to call Stripe again if using Checkout + Connect; funds are already routed appropriately.
+
+If you want tighter control (e.g., hold funds and only transfer on completion), that’s when we’d move to separate charges & transfers (more advanced; you can do that later).
+
+⸻
+
+8. AppContext Methods Needed
+
+Make sure your AppContext (or equivalent) includes:
+	•	createTask(taskInput)
+	•	sendOffer(taskId, note, proposedPrice?)
+	•	chooseHelper(taskId, helperId) → calls API to create Checkout Session and returns URL
+	•	refreshTask(taskId) → reloads from backend after payment success
+	•	completeTask(taskId) → marks as completed with proof check
+	•	cancelTask(taskId, by) → marks canceled
+	•	disputeTask(taskId) → marks disputed
+	•	createChatThread(taskId, posterId, helperId) (called from webhook/backend)
+	•	sendChatMessage(threadId, data)
+	•	createSupportTicket(...)
+	•	setUserMode("poster" | "helper")
+
+⸻
+
+9. Testing Script (for you as owner)
+
+Once the dev hooks this up, here’s how YOU should test:
+	1.	Log in as Poster A.
+	2.	Post a job (status should be "requested").
+	3.	Log in as Helper B.
+	4.	Set up payouts (Stripe Express onboarding).
+	5.	See job in helper list, send an offer.
+	6.	Log back as Poster A:
+	•	See offers
+	•	Choose Helper B → get bounced to Stripe Checkout.
+	7.	Pay with test card.
+	8.	Confirm that:
+	•	Job disappears from helper’s queue.
+	•	Task status becomes "accepted".
+	•	Chat appears and works.
+	•	Helper can see full address.
+	9.	Upload proof → click “Mark completed”.
+	10.	Confirm status = "completed" and that Stripe dashboard shows:
+	•	Charge
+	•	Application fee (your cut)
+	•	Transfer/payout to helper.
+
+⸻
+
+If you want, next I can generate:
+	•	Example Node/Express API routes for each endpoint
+	•	Or a React/React Native AppContext implementation skeleton
+
+But with this blueprint, your builder should be able to plug Stripe Connect Express into your existing request→offer→accept→chat→complete flow cleanly.

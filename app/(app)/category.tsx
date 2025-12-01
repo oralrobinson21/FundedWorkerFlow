@@ -1,19 +1,21 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import { useRouter } from "expo-router";
 import { useApp } from "@/context/AppContext";
 import { CATEGORIES, TaskCategory } from "@/types";
 
 export default function CategoryScreen() {
   const { userMode } = useApp();
+  const router = useRouter();
 
   const handleCategorySelect = (category: TaskCategory) => {
-    // Navigate to appropriate screen based on mode
-    console.log("Selected category:", category, "Mode:", userMode);
+    // Navigate to job list with category filter
+    router.replace("/(app)/job-list");
   };
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Select a category</Text>
+      <Text style={styles.title}>What do you need help with?</Text>
       <View style={styles.grid}>
         {CATEGORIES.map((category) => (
           <Pressable key={category} style={styles.categoryCard} onPress={() => handleCategorySelect(category)}>

@@ -3,6 +3,7 @@ export type TaskStatus = "requested" | "accepted" | "in_progress" | "completed" 
 export type TaskCategory = "Cleaning" | "Moving" | "Handyman" | "Groceries" | "Other";
 export type SupportTicketStatus = "open" | "in_review" | "closed";
 export type JobOfferStatus = "pending" | "declined" | "accepted";
+export type PaymentStatus = "pending" | "paid" | "refunded" | "failed";
 
 export interface User {
   id: string;
@@ -11,6 +12,8 @@ export interface User {
   phone?: string;
   defaultZipCode?: string;
   accountNumber: string;
+  stripeAccountId?: string;
+  payoutsEnabled?: boolean;
   createdAt: string;
 }
 
@@ -26,10 +29,19 @@ export interface Task {
   status: TaskStatus;
   posterId: string;
   posterName: string;
+  posterEmail?: string;
   helperId?: string;
   helperName?: string;
+  helperEmail?: string;
   confirmationCode: string;
   photosRequired: boolean;
+  // Stripe/payment fields
+  stripeCheckoutSessionId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  platformFeeAmount?: number;
+  helperAmount?: number;
+  paymentStatus?: PaymentStatus;
   createdAt: string;
   acceptedAt?: string;
   completedAt?: string;
@@ -81,7 +93,6 @@ export interface SupportTicket {
 }
 
 export const CATEGORIES: TaskCategory[] = ["Cleaning", "Moving", "Handyman", "Groceries", "Other"];
-
 export const PLATFORM_FEE_PERCENT = 0.10;
 
 function generateConfirmationCode(): string {

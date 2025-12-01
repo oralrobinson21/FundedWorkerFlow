@@ -20,7 +20,8 @@ interface AppContextType {
   // Task methods
   createTask: (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode" | "status">) => Promise<Task>;
   sendOffer: (taskId: string, note: string, proposedPrice?: number) => Promise<void>;
-  chooseHelper: (taskId: string, offerId: string) => Promise<void>;
+  chooseHelper: (taskId: string, offerId: string) => Promise<{ checkoutUrl?: string }>;
+  initializeStripeConnect: () => Promise<{ url?: string }>;
   completeTask: (taskId: string) => Promise<void>;
   cancelTask: (taskId: string, canceledBy: "poster" | "helper") => Promise<void>;
   disputeTask: (taskId: string) => Promise<void>;
@@ -266,7 +267,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveJobOffers(updatedOffers);
   };
 
-  const chooseHelper = async (taskId: string, offerId: string) => {
+  const chooseHelper = async (taskId: string, offerId: string): Promise<{ checkoutUrl?: string }> => {
     if (!user) throw new Error("User not logged in");
 
     const offer = jobOffers.find(o => o.id === offerId);
@@ -275,8 +276,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const task = tasks.find(t => t.id === taskId);
     if (!task) throw new Error("Task not found");
 
+    // TODO: Call backend API to create Stripe Checkout Session
+    // const { checkoutUrl } = await fetch('/api/tasks/choose-helper', {
+    //   method: 'POST',
+    //   body: JSON.stringify({ taskId, helperId: offer.helperId })
+    // }).then(r => r.json());
+    // return { checkoutUrl };
+
+    // For now, mark as accepted locally and create chat thread
     const updatedTasks = tasks.map(t =>
-      t.id === taskId ? { ...t, status: "accepted" as TaskStatus, helperId: offer.helperId, helperName: offer.helperName, acceptedAt: new Date().toISOString() } : t
+      t.id === taskId ? { ...t, status: "accepted" as TaskStatus, helperId: offer.helperId, helperName: offer.helperName, acceptedAt: new Date().toISOString(), paymentStatus: "paid" as PaymentStatus } : t
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
@@ -288,32 +297,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveJobOffers(updatedOffers);
 
     await createChatThread(taskId, task.posterId, offer.helperId);
+    return {};
   };
 
-  const authorizePayment = async (taskId: string, paymentIntentId: string, amount: number) => {
-    const newPayment: Payment = {
-      id: generateId(),
-      taskId,
-      paymentIntentId,
-      amount,
-      status: "authorized",
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedPayments = [...payments, newPayment];
-    setPayments(updatedPayments);
-    await savePayments(updatedPayments);
-  };
-
-  const capturePayment = async (taskId: string) => {
-    const payment = payments.find(p => p.taskId === taskId);
-    if (!payment) throw new Error("Payment not found");
-
-    const updatedPayments = payments.map(p =>
-      p.taskId === taskId ? { ...p, status: "captured" as PaymentStatus } : p
-    );
-    setPayments(updatedPayments);
-    await savePayments(updatedPayments);
+  const initializeStripeConnect = async (): Promise<{ url?: string }> => {
+    if (!user) throw new Error("User not logged in");
+    // TODO: Call backend API to initiate Stripe Connect onboarding
+    // const { accountLink } = await fetch('/api/stripe/connect/onboard', {
+    //   method: 'POST',
+    //   headers: { 'Authorization': `Bearer ${user.id}` }
+    // }).then(r => r.json());
+    // return { url: accountLink };
+    return {};
   };
 
   const completeTask = async (taskId: string) => {
@@ -422,6 +417,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createTask,
         sendOffer,
         chooseHelper,
+        initializeStripeConnect,
         completeTask,
         cancelTask,
         disputeTask,
