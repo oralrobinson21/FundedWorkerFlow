@@ -1,86 +1,77 @@
-export type UserRole = "customer" | "worker";
-
-export type TaskStatus = "unpaid" | "paid_waiting" | "assigned" | "worker_marked_done" | "completed" | "disputed";
+export type UserMode = "poster" | "helper";
+export type TaskStatus = "open" | "accepted" | "completed" | "canceled" | "disputed";
+export type TaskCategory = "Cleaning" | "Moving" | "Handyman" | "Groceries" | "Other";
+export type SupportTicketStatus = "open" | "in_review" | "closed";
 
 export interface User {
   id: string;
   name: string;
-  email: string;
   phone?: string;
-  role: UserRole;
-  avatarIndex: number;
+  defaultZipCode?: string;
   createdAt: string;
-  avgRating?: number;
-  totalRatings?: number;
-  stripeConnectId?: string;
 }
 
 export interface Task {
   id: string;
-  customerId: string;
-  customerName: string;
   title: string;
   description: string;
-  neighborhood: string;
+  category: TaskCategory;
+  zipCode: string;
   areaDescription: string | null;
   fullAddress: string | null;
   price: number;
-  timeWindow: string;
   status: TaskStatus;
-  workerId?: string;
-  workerName?: string;
+  posterId: string;
+  posterName: string;
+  helperId?: string;
+  helperName?: string;
+  confirmationCode: string;
+  photosRequired: boolean;
   createdAt: string;
+  acceptedAt?: string;
   completedAt?: string;
-  beforePhotoUrl?: string;
-  afterPhotoUrl?: string;
+  canceledAt?: string;
+  canceledBy?: "poster" | "helper";
 }
 
-export interface Message {
+export interface ChatThread {
   id: string;
   taskId: string;
+  posterId: string;
+  helperId: string;
+  createdAt: string;
+  expiresAt: string;
+  isClosed: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
   senderId: string;
   senderName: string;
-  content: string;
-  timestamp: string;
-  read: boolean;
-}
-
-export interface Conversation {
-  id: string;
-  taskId: string;
-  taskTitle: string;
-  otherUserId: string;
-  otherUserName: string;
-  otherUserAvatarIndex: number;
-  lastMessage: string;
-  lastMessageTime: string;
-  unreadCount: number;
-}
-
-export interface Rating {
-  id: string;
-  taskId: string;
-  ratedUserId: string;
-  ratingUserId: string;
-  ratingUserName: string;
-  score: number;
-  review?: string;
+  text?: string;
+  imageUrl?: string;
+  isProof: boolean;
   createdAt: string;
 }
 
-export const NEIGHBORHOODS = [
-  "Manhattan - Upper East Side",
-  "Manhattan - Upper West Side",
-  "Manhattan - Midtown",
-  "Manhattan - Downtown",
-  "Brooklyn - Williamsburg",
-  "Brooklyn - Park Slope",
-  "Brooklyn - DUMBO",
-  "Brooklyn - Bushwick",
-  "Queens - Astoria",
-  "Queens - Long Island City",
-  "Bronx - Riverdale",
-  "Staten Island",
-];
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  taskId?: string;
+  subject: string;
+  message: string;
+  status: SupportTicketStatus;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export const PLATFORM_FEE_PERCENT = 0.08;
+export const CATEGORIES: TaskCategory[] = ["Cleaning", "Moving", "Handyman", "Groceries", "Other"];
+
+export const PLATFORM_FEE_PERCENT = 0.10;
+
+function generateConfirmationCode(): string {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+export { generateConfirmationCode };

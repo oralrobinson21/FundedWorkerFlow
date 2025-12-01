@@ -1,29 +1,26 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, Task, Conversation, Message, UserRole, TaskStatus, Rating } from "@/types";
-import { isSupabaseAvailable, userQueries, taskQueries, messageQueries, conversationQueries, ratingQueries } from "@/services/supabase";
+import { User, Task, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode } from "@/types";
 
 interface AppContextType {
   user: User | null;
   isLoading: boolean;
-  isHelperMode: boolean;
+  userMode: UserMode;
   tasks: Task[];
-  conversations: Conversation[];
-  messages: Record<string, Message[]>;
-  ratings: Rating[];
-  login: (name: string, email: string, role: UserRole) => Promise<void>;
+  chatThreads: ChatThread[];
+  chatMessages: Record<string, ChatMessage[]>;
+  supportTickets: SupportTicket[];
+  login: (name: string, phone?: string, defaultZipCode?: string) => Promise<void>;
   logout: () => Promise<void>;
-  switchRole: () => Promise<void>;
-  toggleHelperMode: () => Promise<void>;
-  createTask: (task: Omit<Task, "id" | "customerId" | "customerName" | "status" | "createdAt">) => Promise<Task>;
-  payTask: (taskId: string) => Promise<void>;
+  setUserMode: (mode: UserMode) => Promise<void>;
+  createTask: (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode">) => Promise<Task>;
   acceptTask: (taskId: string) => Promise<void>;
-  markJobDone: (taskId: string, beforePhotoUrl?: string, afterPhotoUrl?: string) => Promise<void>;
-  approveJob: (taskId: string) => Promise<void>;
-  disputeJob: (taskId: string) => Promise<void>;
-  sendMessage: (taskId: string, content: string) => Promise<void>;
-  markConversationRead: (conversationId: string) => Promise<void>;
-  createRating: (taskId: string, ratedUserId: string, score: number, review?: string) => Promise<void>;
+  completeTask: (taskId: string) => Promise<void>;
+  cancelTask: (taskId: string, canceledBy: "poster" | "helper") => Promise<void>;
+  disputeTask: (taskId: string) => Promise<void>;
+  sendChatMessage: (threadId: string, text?: string, imageUrl?: string, isProof?: boolean) => Promise<void>;
+  createChatThread: (taskId: string, posterId: string, helperId: string) => Promise<ChatThread>;
+  createSupportTicket: (subject: string, message: string, taskId?: string) => Promise<void>;
   syncWithSupabase: () => Promise<void>;
 }
 
@@ -32,10 +29,10 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   USER: "@citytasks_user",
   TASKS: "@citytasks_tasks",
-  CONVERSATIONS: "@citytasks_conversations",
-  MESSAGES: "@citytasks_messages",
-  RATINGS: "@citytasks_ratings",
-  HELPER_MODE: "@citytasks_helper_mode",
+  CHAT_THREADS: "@citytasks_chat_threads",
+  CHAT_MESSAGES: "@citytasks_chat_messages",
+  SUPPORT_TICKETS: "@citytasks_support_tickets",
+  USER_MODE: "@citytasks_user_mode",
 };
 
 function generateId(): string {
@@ -45,11 +42,11 @@ function generateId(): string {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isHelperMode, setIsHelperMode] = useState(false);
+  const [userMode, setUserModeState] = useState<UserMode>("poster");
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [messages, setMessages] = useState<Record<string, Message[]>>({});
-  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
+  const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
 
   useEffect(() => {
     loadData();
@@ -57,25 +54,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      const [userData, tasksData, convsData, msgsData, ratingsData, helperModeData] = await Promise.all([
+      const [userData, tasksData, threadsData, msgsData, ticketsData, modeData] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.USER),
         AsyncStorage.getItem(STORAGE_KEYS.TASKS),
-        AsyncStorage.getItem(STORAGE_KEYS.CONVERSATIONS),
-        AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
-        AsyncStorage.getItem(STORAGE_KEYS.RATINGS),
-        AsyncStorage.getItem(STORAGE_KEYS.HELPER_MODE),
+        AsyncStorage.getItem(STORAGE_KEYS.CHAT_THREADS),
+        AsyncStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES),
+        AsyncStorage.getItem(STORAGE_KEYS.SUPPORT_TICKETS),
+        AsyncStorage.getItem(STORAGE_KEYS.USER_MODE),
       ]);
 
       if (userData) setUser(JSON.parse(userData));
       if (tasksData) setTasks(JSON.parse(tasksData));
-      if (convsData) setConversations(JSON.parse(convsData));
-      if (msgsData) setMessages(JSON.parse(msgsData));
-      if (ratingsData) setRatings(JSON.parse(ratingsData));
-      if (helperModeData) setIsHelperMode(JSON.parse(helperModeData));
-
-      if (isSupabaseAvailable) {
-        syncWithSupabase();
-      }
+      if (threadsData) setChatThreads(JSON.parse(threadsData));
+      if (msgsData) setChatMessages(JSON.parse(msgsData));
+      if (ticketsData) setSupportTickets(JSON.parse(ticketsData));
+      if (modeData) setUserModeState(JSON.parse(modeData) as UserMode);
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -144,13 +137,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveHelperMode(newHelperMode);
   };
 
-  const login = async (name: string, email: string, role: UserRole) => {
+  const login = async (name: string, phone?: string, defaultZipCode?: string) => {
     const newUser: User = {
       id: generateId(),
       name,
-      email,
-      role,
-      avatarIndex: Math.floor(Math.random() * 6),
+      phone,
+      defaultZipCode,
       createdAt: new Date().toISOString(),
     };
     setUser(newUser);
@@ -162,26 +154,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveUser(null);
   };
 
-  const switchRole = async () => {
-    if (!user) return;
-    const newRole: UserRole = user.role === "customer" ? "worker" : "customer";
-    const updatedUser = { ...user, role: newRole };
-    setUser(updatedUser);
-    await saveUser(updatedUser);
+  const setUserMode = async (mode: UserMode) => {
+    setUserModeState(mode);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_MODE, JSON.stringify(mode));
+    } catch (error) {
+      console.error("Error saving user mode:", error);
+    }
   };
 
-  const createTask = async (taskData: Omit<Task, "id" | "customerId" | "customerName" | "status" | "createdAt">): Promise<Task> => {
+  const createTask = async (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode">): Promise<Task> => {
     if (!user) throw new Error("User not logged in");
     
     const newTask: Task = {
       ...taskData,
       id: generateId(),
-      customerId: user.id,
-      customerName: user.name,
-      status: "unpaid",
+      posterId: user.id,
+      posterName: user.name,
+      confirmationCode: generateConfirmationCode(),
+      status: "open",
       createdAt: new Date().toISOString(),
-      areaDescription: taskData.areaDescription || null,
-      fullAddress: taskData.fullAddress || null,
     };
     
     const updatedTasks = [newTask, ...tasks];

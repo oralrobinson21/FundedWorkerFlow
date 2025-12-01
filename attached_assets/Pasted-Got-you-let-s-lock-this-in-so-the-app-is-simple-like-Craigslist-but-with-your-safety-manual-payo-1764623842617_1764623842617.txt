@@ -1,0 +1,428 @@
+Got you — let’s lock this in so the app is simple like Craigslist but with your safety + manual payout flow.
+
+I’ll treat this as the “final spec” you can give a dev or another AI agent to make everything 100%:
+
+⸻
+
+1. Core Roles & Main Screens
+
+Roles (same account, two modes)
+	•	Poster (Customer): creates jobs.
+	•	Helper (Worker): accepts jobs.
+
+A single user can toggle between “I need help” and “I’m helping”.
+
+Main screens
+	1.	Mode Selector / Home
+	•	Big toggle/buttons:
+	•	“I need help (Post a job)”
+	•	“I’m helping (Find work)”
+	•	Current mode saved in app state (e.g., userMode = "poster" or "helper").
+	2.	Category Screen (shared)
+	•	After choosing a mode:
+	•	Poster mode: “What do you need help with?”
+	•	Helper mode: “What type of work are you looking for?”
+	•	Categories example:
+	•	Cleaning
+	•	Moving
+	•	Handyman
+	•	Groceries
+	•	Other
+	•	Tap category → next screen is different per mode:
+	•	Poster → Create Job screen
+	•	Helper → Job List screen filtered by that category.
+	3.	Create Job Screen (Poster)
+	4.	Job List Screen (Helper)
+	5.	Job Detail Screen
+	6.	Messages (one thread per accepted job)
+	7.	My Jobs (Poster & Helper views)
+	8.	Help & Support
+
+⸻
+
+2. Data Model (Backend)
+
+users
+	•	id
+	•	name
+	•	phone
+	•	defaultZipCode
+	•	createdAt
+
+tasks
+
+Required to support all your rules:
+	•	id
+	•	title
+	•	description
+	•	category (string/enum)
+	•	zipCode (string, required)
+	•	areaDescription (optional, e.g. “Bronx – 170th & Grand Concourse”)
+	•	fullAddress (optional but recommended, only shown after accept)
+	•	price (number)
+	•	status ("open" | "accepted" | "completed" | "canceled")
+	•	posterId (FK → users.id)
+	•	helperId (nullable FK → users.id)
+	•	confirmationCode (string, unique, e.g. 6–8 chars)
+	•	photosRequired (bool, default true)
+	•	createdAt
+	•	acceptedAt (nullable)
+	•	completedAt (nullable)
+	•	canceledAt (nullable)
+	•	canceledBy ("poster" | "helper" | null)
+
+chatThreads
+	•	id
+	•	taskId (FK → tasks.id)
+	•	posterId
+	•	helperId
+	•	createdAt
+	•	expiresAt (3 days after completion or acceptance — see below)
+	•	isClosed (bool)
+
+chatMessages
+	•	id
+	•	threadId
+	•	senderId
+	•	text (nullable)
+	•	imageUrl (nullable)
+	•	isProof (bool, default false)
+	•	createdAt
+
+Privacy rule: only posterId and helperId can access a chatThread and its chatMessages.
+
+⸻
+
+3. Job Posting Flow (Poster)
+
+Step 1: Mode & Category
+	•	User taps “I need help” → Category screen.
+	•	Select category → goes to Create Job.
+
+Step 2: Create Job screen fields
+
+Required:
+	•	Title (short)
+	•	Description (what needs to be done)
+	•	Category (pre-selected)
+	•	Zip Code (required)
+	•	Price / Budget
+
+Optional but recommended:
+	•	Area / Neighborhood
+	•	Helper sees this before accepting.
+	•	Full Address
+	•	Only helper sees it after accepting.
+	•	Photos Required toggle
+	•	Default ON — “Require photo proof when completed.”
+
+Validation
+	•	Do not let them submit unless:
+	•	title, description, zipCode, price filled.
+	•	For in-person tasks: also require fullAddress.
+
+On submit
+	•	Create task:
+	•	status = "open"
+	•	confirmationCode = random unique string
+	•	Poster can immediately post multiple jobs; no limit:
+	•	After posting, show:
+	•	Button: “Post another job”
+	•	Button: “View my jobs”
+
+⸻
+
+4. Finding Jobs (Helper Mode)
+
+Step 1: Mode & Category
+	•	User taps “I’m helping”.
+	•	Category screen: choose what type of work they want.
+
+Step 2: Zip filter UI
+
+At the top of the Job List:
+	•	Text field: Zip code
+	•	Auto-filled from user.defaultZipCode if available.
+	•	Optional “Search radius” dropdown (e.g., 0 / 5 / 10 miles) — can add later.
+	•	Button: “Update results”.
+
+Backend filter
+
+Query tasks where:
+	•	status = "open"
+	•	category = selected category
+	•	zipCode matches filter (or within radius, if you implement distance).
+
+Job List card (Helper view, before acceptance)
+
+Show:
+	•	Title
+	•	Category
+	•	Price
+	•	Zip code
+	•	Area / Neighborhood (if provided)
+	•	Basic timing info
+Do not show:
+	•	fullAddress.
+
+Tap card → Job Detail (before acceptance).
+
+⸻
+
+5. Job Detail: Before vs After Acceptance
+
+Before acceptance (Helper)
+
+Show:
+	•	Title
+	•	Description
+	•	Category
+	•	Price
+	•	Zip code
+	•	Area / Neighborhood
+	•	Button: “Accept job”
+
+Hide:
+	•	fullAddress.
+
+On Accept job
+
+When helper taps “Accept job”:
+	•	Set:
+	•	task.status = "accepted"
+	•	task.helperId = currentUser.id
+	•	task.acceptedAt = now
+	•	Create a chatThread for this task:
+	•	posterId = task.posterId
+	•	helperId = currentUser.id
+	•	expiresAt = now + 3 days (or now + 3 days after completion if you prefer)
+	•	Show success:
+	•	“You accepted this job. The exact address and chat are now available.”
+
+After acceptance (Helper view)
+
+Now Job Detail shows:
+	•	All previous info +
+	•	Full Address, with lock icon and label:
+	•	🔒 Exact address (visible only to you and the customer)
+	•	Button: “Open chat & upload proof”
+	•	Button: “Mark complete” (after proof photo uploaded)
+	•	Button: “Cancel / Withdraw” (if you want helpers to back out)
+
+Poster view (for accepted job)
+	•	Sees both area + fullAddress.
+	•	Sees helper info.
+	•	Sees confirmationCode.
+	•	Has:
+	•	Button: “Open chat”
+	•	Button: “Cancel job”
+
+⸻
+
+6. Easy Job Cancellation
+
+Poster cancellation
+
+On My Jobs or Job Detail:
+	•	For status = "open" or "accepted":
+	•	Show “Cancel job” button.
+	•	On tap:
+	•	Ask for reason (optional).
+	•	Update:
+	•	status = "canceled"
+	•	canceledAt = now
+	•	canceledBy = "poster"
+	•	If there’s a helper:
+	•	Notify helper that job is canceled.
+
+Helper withdrawal (optional but recommended)
+
+If helper wants to back out:
+	•	Show “Withdraw from job” button while status = "accepted".
+	•	On tap:
+	•	Option A (simple): mark as canceled:
+	•	status = "canceled"
+	•	canceledBy = "helper"
+	•	Option B (more flexible): reopen the job:
+	•	helperId = null
+	•	status = "open"
+
+For now, Option A (simple) is fine.
+
+⸻
+
+7. Manual Payout via Confirmation Number
+
+You’re not automating Stripe yet, so:
+
+On task creation
+	•	Generate confirmationCode (e.g., 6–8 alphanumeric).
+
+On completion (app behavior)
+	1.	Helper:
+	•	Uploads required photo (proof).
+	•	Taps “Mark complete”.
+	•	App checks:
+	•	If photosRequired is true, require at least one chatMessage with:
+	•	imageUrl not null
+	•	isProof = true.
+	•	If OK:
+	•	Set task.status = "completed".
+	•	completedAt = now.
+	2.	Both sides see the confirmation:
+	•	Helper Job Detail:
+	•	“Job completed. Your confirmation number: XYZ123. Share this with the customer to get paid.”
+	•	Poster Job Detail:
+	•	“Job completed. Pay your helper using confirmation number: XYZ123.”
+
+Your offline process
+	•	You use confirmation code + job ID in your own records (spreadsheet, bank app, etc.) to send money via Cash App/Zelle/etc. until you’re big enough to automate payouts.
+
+⸻
+
+8. Messaging + Photos + Auto-Delete After 3 Days
+
+Creation
+	•	A chatThread is automatically created when a task is accepted.
+
+Access
+	•	Only posterId and helperId can open it.
+	•	Enforce this on backend:
+	•	if currentUser.id not in (posterId, helperId) → deny.
+
+Messages
+
+Each message can contain:
+	•	Text only
+	•	Image only
+	•	Text + Image
+	•	Optional isProof flag.
+
+For proof:
+	•	On upload, show checkbox/toggle:
+	•	“Mark this photo as proof of completion.”
+	•	Store isProof = true for that message.
+
+Auto-delete after 3 days
+
+Set up a scheduled backend job (e.g., cron / scheduled function):
+	1.	Every night:
+	•	Find any chatThreads where:
+	•	expiresAt < now
+	2.	For each:
+	•	Delete or hard-truncate messages:
+	•	Delete chatMessages first.
+	•	Then set isClosed = true or delete the thread.
+	•	Make sure UI:
+	•	Shows “Chat expired” if user tries to open.
+
+How you define expiresAt:
+	•	Simple version:
+	•	expiresAt = acceptedAt + 3 days.
+	•	Better version:
+	•	expiresAt = completedAt + 3 days (if completed).
+	•	If never completed, still expire based on acceptedAt.
+
+Pick one, document it, and implement.
+
+⸻
+
+9. “Switch to Helper” Fix
+
+Your current issue: “Switch to helper not working”.
+
+Make sure:
+	1.	There’s a single userMode in global state (context/store):
+	•	"poster" or "helper".
+	2.	The “Switch to helper” button:
+	•	Actually calls something like:
+setUserMode("helper");
+	•	Then navigates to the correct home screen:
+	•	navigation.navigate("HelperHome"); or equivalent.
+	3.	UI reflects mode:
+	•	Helper mode home shows:
+	•	“Find work” + Category grid.
+	•	Poster mode home shows:
+	•	“Post a job” + “My jobs”.
+
+Verify that:
+	•	No old code is hiding the helper view behind a wrong condition (if (role === "helper") if you’re now using a mode toggle instead of server role.
+
+⸻
+
+10. Help & Support Fix
+
+Your note: “help and support not working”.
+
+Make it dead simple:
+	1.	Help & Support screen (route exists in navigation):
+	•	Section 1: “Contact us”
+	•	Show a simple form:
+	•	Subject
+	•	Message
+	•	Optional screenshot upload
+	•	On submit:
+	•	Send to your support email or store in supportTickets table.
+	•	Section 2: “Quick help”
+	•	3–5 short Q&As (static for now):
+	•	How do I cancel a job?
+	•	When should I pay my helper?
+	•	Why can’t I see the address yet?
+	2.	Wire up navigation:
+	•	In your profile/settings:
+	•	“Help & Support” → navigation.navigate("Support");
+	3.	Keep it minimal:
+	•	Even just a mailto link + static FAQ is enough in v1.
+
+⸻
+
+11. “Ultimate 100% Checklist”
+
+Here’s the compressed checklist you can hand to a dev/agent:
+	1.	Roles & Navigation
+	•	Implement userMode switch (poster/helper).
+	•	Mode-based home → Category screen → next screen depending on mode.
+	2.	Job Data Model
+	•	Ensure tasks has:
+	•	zipCode (required), areaDescription, fullAddress, status, posterId, helperId, confirmationCode, timestamps, etc.
+	3.	Job Posting
+	•	Require zipCode in the form.
+	•	Allow multiple jobs per user.
+	•	Generate confirmationCode at creation.
+	4.	Job Discovery
+	•	Helper can filter by zip.
+	•	Job List only shows area + zip (no fullAddress).
+	•	Job Detail (before accept) still hides fullAddress.
+	5.	Acceptance + Address Privacy
+	•	On accept:
+	•	Set helperId, status = "accepted".
+	•	Create chatThread.
+	•	After accept:
+	•	Show fullAddress only to that helper + poster.
+	•	Keep it hidden everywhere else.
+	6.	Cancellation
+	•	Poster can cancel from Job Detail/My Jobs.
+	•	Optionally allow helper withdrawal.
+	•	Update status, canceledAt, canceledBy.
+	7.	Messaging & Proof
+	•	One chatThread per accepted job.
+	•	Only poster/helper can see it.
+	•	Allow image messages; support isProof.
+	•	Require at least one proof image before marking job completed (if photosRequired true).
+	8.	Completion + Confirmation Code
+	•	When marking complete:
+	•	Validate proof.
+	•	Set status = "completed".
+	•	Show confirmationCode to both sides.
+	9.	Chat Auto-Delete
+	•	Set expiresAt on threads.
+	•	Scheduled job deletes messages/threads 3 days after expiry.
+	•	UI displays “Chat expired” gracefully.
+	10.	Help & Support
+
+	•	Add functioning “Help & Support” screen + navigation.
+	•	At least one contact method & mini FAQ.
+
+⸻
+
+If you want, next message you can paste your current navigation code (where “switch to helper” and “help & support” live), and I’ll rewrite those specific pieces in code so they match this spec exactly.

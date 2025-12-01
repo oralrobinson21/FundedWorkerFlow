@@ -1,0 +1,409 @@
+If a job is $10 and:
+	•	Worker gets $9
+	•	Platform takes 8% ($0.80) on the job
+	•	And 2% ($0.20) when paying out
+
+That’s a total 10% fee ($1.00 on $10).
+
+For an early, simple marketplace where:
+	•	You’re not providing insurance,
+	•	You’re doing manual payouts,
+	•	And UX is “Craigslist-simple”
+
+➡️ 10% total is very fair.
+16% (i.e., $1.60 on $10, $8.40 to worker) starts to feel high unless you offer real extra value (insurance, guarantees, heavy marketing, etc.).
+
+My recommendation:
+Start with 10–12% total (your 8% + 2% structure is fine), watch behavior, and only move up if:
+	•	Demand > supply, and
+	•	People clearly see the value.
+
+⸻
+
+COPY THIS TO YOUR BUILDER / OTHER AI
+
+(Everything below is written as a clear spec. Just paste it.)
+
+⸻
+
+APP SPEC – SIMPLE JOB MARKETPLACE WITH MANUAL PAYOUTS
+
+1. Roles & Modes
+
+There is one account type, but the user can switch modes:
+	•	Poster mode (“I need help”)
+	•	Helper mode (“I’m helping”)
+
+App must have:
+	•	A main toggle or buttons on home:
+	•	“I need help (post a job)”
+	•	“I’m helping (find work)”
+	•	userMode stored in global state: "poster" or "helper".
+
+⸻
+
+2. Main Screens
+	1.	Home / Mode Selector
+	•	Two big choices: “I need help” and “I’m helping”.
+	2.	Category Screen
+	•	Used by both modes.
+	•	Shows simple categories:
+	•	Cleaning, Moving, Handyman, Groceries, Other (or similar).
+	•	Behavior:
+	•	If userMode = poster → tap category → Create Job screen.
+	•	If userMode = helper → tap category → Job List screen (filtered).
+	3.	Create Job Screen (Poster)
+	4.	Job List Screen (Helper)
+	5.	Job Detail Screen
+	•	Different content depending on:
+	•	poster vs helper
+	•	open vs accepted vs completed vs canceled.
+	6.	Messages Screen (1 chat per accepted job)
+	7.	My Jobs Screen
+	•	Poster: jobs I posted.
+	•	Helper: jobs I accepted.
+	8.	Help & Support Screen
+	•	User can create a support ticket from here.
+
+⸻
+
+3. Data Model (Must Have Fields)
+
+Users:
+	•	id
+	•	name
+	•	phone
+	•	defaultZipCode
+	•	createdAt
+
+Tasks (Jobs):
+	•	id
+	•	title
+	•	description
+	•	category
+	•	zipCode (required)
+	•	areaDescription (optional, shown to helpers before accept)
+	•	fullAddress (optional, only visible after accept to poster + helper)
+	•	price (number, the job amount)
+	•	status → "open" | "accepted" | "completed" | "canceled" | "disputed"
+	•	posterId
+	•	helperId (nullable)
+	•	confirmationCode (string, unique, generated on creation)
+	•	photosRequired (bool, default true)
+	•	createdAt
+	•	acceptedAt (nullable)
+	•	completedAt (nullable)
+	•	canceledAt (nullable)
+	•	canceledBy → "poster" | "helper" | null
+
+ChatThreads:
+	•	id
+	•	taskId
+	•	posterId
+	•	helperId
+	•	createdAt
+	•	expiresAt (3 days after completion or acceptance – choose one and be consistent)
+	•	isClosed (bool)
+
+ChatMessages:
+	•	id
+	•	threadId
+	•	senderId
+	•	text (nullable)
+	•	imageUrl (nullable)
+	•	isProof (bool, default false)
+	•	createdAt
+
+SupportTickets:
+	•	id
+	•	userId
+	•	taskId (nullable – a ticket may or may not be tied to a specific job)
+	•	subject
+	•	message
+	•	status → "open" | "in_review" | "closed"
+	•	createdAt
+	•	updatedAt
+
+⸻
+
+4. Posting a Job (Poster Flow)
+	1.	From Home:
+	•	User selects “I need help”.
+	•	Goes to Category screen.
+	2.	From Category:
+	•	User taps a category.
+	•	Goes to Create Job screen.
+	3.	Create Job Screen fields (minimum):
+	•	Title (required)
+	•	Description (required)
+	•	Category (pre-selected from prior screen)
+	•	Zip Code (required) – can’t submit without it.
+	•	Price (required)
+	•	Area / Neighborhood (optional, shown to helpers pre-accept)
+	•	Full Address (optional but recommended, shown only after accept)
+	•	Toggle: “Require photo proof” (default ON).
+	4.	Validation:
+	•	Do not allow submit unless:
+	•	title, description, zipCode, price are filled.
+	•	For in-person jobs, optionally enforce fullAddress too (configurable).
+	5.	On submit:
+	•	Create a task with:
+	•	status = "open"
+	•	Unique confirmationCode
+	•	After submit, show:
+	•	“View my jobs” button.
+	•	“Post another job” button.
+	•	Poster must be able to post multiple jobs without any special steps.
+
+⸻
+
+5. Finding Jobs (Helper Flow)
+	1.	From Home:
+	•	User selects “I’m helping”.
+	•	Goes to Category screen.
+	2.	From Category:
+	•	User taps a category.
+	•	Goes to Job List screen filtered by that category.
+	3.	Job List filtering:
+	•	At top of screen:
+	•	Text input: Zip code (required for filtering).
+	•	Auto-fill from user.defaultZipCode if present.
+	•	Button: “Update results”.
+	•	Backend filter:
+	•	status = "open"
+	•	category = selectedCategory
+	•	zipCode must match the entered zip (or within a radius if implemented).
+	4.	Job Card (Helper, before acceptance) shows:
+	•	Title
+	•	Category
+	•	Price
+	•	Zip code
+	•	Area / Neighborhood (if available)
+	•	Basic description snippet
+Must NOT show:
+	•	Full address.
+	5.	Tapping a job opens Job Detail (pre-accept).
+
+⸻
+
+6. Job Detail – Pre & Post Acceptance
+
+Before acceptance (Helper view):
+Show:
+	•	Title
+	•	Description
+	•	Category
+	•	Zip code
+	•	Area / Neighborhood
+	•	Price
+	•	Button: “Accept job”
+	•	Button: “Back”
+
+Hide:
+	•	Full address.
+
+On “Accept job”:
+	•	Set:
+	•	status = "accepted"
+	•	helperId = currentUser.id
+	•	acceptedAt = now
+	•	Create a chatThread row:
+	•	taskId = task.id
+	•	posterId = task.posterId
+	•	helperId = currentUser.id
+	•	createdAt = now
+	•	expiresAt = now + 3 days (or completion + 3 days)
+	•	Redirect helper to Job Detail (post-accept).
+
+After acceptance (Helper view):
+Show:
+	•	Everything above, plus:
+	•	Full address with lock icon and label:
+	•	“🔒 Exact address (only you and the poster can see this)”
+	•	Button: “Open chat / upload proof”
+	•	Button: “Mark complete”
+	•	Button: “Cancel / Withdraw” (if helper wants to deny/stop the job before work)
+
+Poster view (after job accepted):
+	•	Sees:
+	•	Area + full address
+	•	Helper info (name/contact)
+	•	Status
+	•	Confirmation code
+	•	Buttons:
+	•	“Open chat”
+	•	“Cancel job”
+	•	“Dispute completion” (if you implement disputes – see below)
+
+⸻
+
+7. Cancellation, Accept & Deny / Dispute
+
+Poster – Cancel job:
+	•	From My Jobs or Job Detail:
+	•	If status = "open" or "accepted":
+	•	Show “Cancel job” button.
+	•	On tap:
+	•	Confirm dialog.
+	•	Set:
+	•	status = "canceled"
+	•	canceledAt = now
+	•	canceledBy = "poster"
+
+Helper – Cancel / Withdraw:
+	•	If status = "accepted":
+	•	Show “Withdraw from job” (this is the “deny/stop” option for helper).
+	•	On tap:
+	•	Confirm dialog.
+	•	Either:
+	•	Option A (simpler): set:
+	•	status = "canceled"
+	•	canceledBy = "helper"
+	•	Or Option B (more advanced): clear helper and reopen:
+	•	helperId = null
+	•	status = "open"
+
+Deny / Dispute completion (Poster):
+	•	When helper taps “Mark complete”, status becomes "completed" only after proof logic passes.
+	•	If poster is not satisfied:
+	•	They can tap “Dispute job” (or “Deny completion”).
+	•	This sets:
+	•	status = "disputed"
+	•	Optionally creates a SupportTicket tied to taskId.
+	•	For now this can be manual: admin resolves outdated disputes and sets status back to "completed" or "canceled".
+
+⸻
+
+8. Messaging + Photo Proof + Auto-Delete
+
+Chat creation:
+	•	Auto-created only when a job is accepted.
+
+Chat access rules:
+	•	Only posterId and helperId can view that thread and its messages.
+	•	Enforced in backend.
+
+Sending messages:
+	•	Send text.
+	•	Attach image (upload to storage; store URL in imageUrl).
+	•	Checkbox/toggle on image send:
+	•	“Mark this as proof of work.”
+	•	If checked, set isProof = true.
+
+Proof requirement:
+	•	If photosRequired = true on the task:
+	•	When helper taps “Mark complete”, backend must check:
+	•	There exists at least one chatMessage with:
+	•	threadId = thread for this task
+	•	isProof = true
+	•	imageUrl not null
+	•	If no such message → block and show error:
+	•	“You must upload at least one photo as proof before completing.”
+
+Completion logic:
+	•	If proof exists (or if photosRequired = false):
+	•	status = "completed"
+	•	completedAt = now
+
+Auto-delete chat after 3 days:
+	•	On chatThread creation or completion, set expiresAt.
+	•	Add scheduled job (cron) that:
+	•	Finds all chatThreads where expiresAt < now.
+	•	Deletes their chatMessages.
+	•	Sets isClosed = true or deletes the thread itself.
+	•	In UI:
+	•	If isClosed = true or messages are empty and expired:
+	•	Show “Chat expired” message.
+
+⸻
+
+9. Manual Payout & Platform Fees
+
+Job price:
+	•	price is the total amount for the job (e.g., $10).
+
+Fees:
+	•	Platform fee from job: 8% of price.
+	•	Payout fee: 2% of price when sending money out to the helper.
+	•	Total rake = 10% of job price.
+
+Example (price = $10):
+	•	Helper receives $9.00.
+	•	Platform earns $1.00 total:
+	•	$0.80 as 8% fee from the job.
+	•	$0.20 as 2% payout fee when paying the helper.
+
+UI:
+	•	Helper Job Detail (after completion):
+	•	Show:
+	•	“Job amount: $10.00”
+	•	“You will receive: $9.00 (10% platform + payout fee)”
+	•	“Confirmation number: ABC123 – use this to get paid.”
+	•	Poster Job Detail (after completion):
+	•	Show:
+	•	“Job amount: $10.00”
+	•	“Pay your helper $9.00”
+	•	“Confirmation number: ABC123 (use this when you send payment).”
+
+Your internal process (manual for now):
+	•	You look up task by confirmationCode in your admin.
+	•	You send $9.00 to helper via Cash App, Zelle, etc.
+	•	You keep $1.00 (10%) as your revenue.
+
+⸻
+
+10. Help & Support – Tickets
+
+Help & Support Screen:
+	•	Always reachable from profile/settings or menu.
+	•	Must allow the user to:
+	•	Create a support ticket.
+	•	See a simple list of their tickets.
+
+Create Ticket form:
+	•	Fields:
+	•	Subject (required)
+	•	Message (required)
+	•	Optional: related Job (select from “My jobs”)
+	•	On submit:
+	•	Create SupportTicket with status = "open".
+
+Ticket list:
+	•	Show:
+	•	Subject
+	•	Status (open / in_review / closed)
+	•	Created date
+	•	Tap ticket: shows full message and any admin response (for now this can be a simple text field you update manually in the DB).
+
+As an end user, I must be able to:
+	•	Create a support ticket.
+	•	See that the ticket is created and has a status.
+	•	Cancel a job.
+	•	Accept a job.
+	•	Withdraw/deny a job I accepted (helper).
+	•	Dispute/deny a job completion if I am the poster (sets status to “disputed”).
+
+⸻
+
+11. Switch to Helper / Poster & Navigation
+	•	There must be a reliable way to switch modes that always works:
+	•	“Switch to helper” sets userMode = "helper" and routes to Helper home.
+	•	“Switch to poster” sets userMode = "poster" and routes to Poster home.
+	•	No old role checks should block this (use userMode for UI decisions).
+
+⸻
+
+COMMENTS (for the builder)
+	•	Keep the UI as simple and text-based as Craigslist.
+	•	The MOST important functional checks from end-user POV:
+	1.	I can post a job with a zip code.
+	2.	I can see jobs by zip and category in helper mode.
+	3.	I can accept a job and then see the full address.
+	4.	I can cancel / withdraw a job easily as both poster and helper.
+	5.	I can upload proof photos and mark job complete.
+	6.	I can see the confirmation number after completion.
+	7.	I can create a support ticket, and see it listed with a status.
+	8.	Chats auto-expire after 3 days and cannot be accessed afterward.
+	•	Fees: total 10% (8% + 2%) is acceptable and not too aggressive for early users.
+
+⸻
