@@ -1,0 +1,112 @@
+Nice, this one’s actually simple. That error is React Navigation telling you:
+
+“You’re calling useBottomTabBarHeight() in a component that is not inside a bottom tab navigator.”
+
+Your other bot clearly added a ScreenScrollView that always tries to use useBottomTabBarHeight, but you either:
+	•	Don’t have a bottom tab navigator at all, or
+	•	Are using ScreenScrollView in stack screens that aren’t inside the tabs.
+
+So we just need to stop that hook from being used globally.
+
+⸻
+
+What you should do right now
+
+1. Open ScreenScrollView file
+
+Look for something like:
+
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+function useScreenInsets() {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+
+  return {
+    paddingTop: insets.top,
+    paddingBottom: insets.bottom + tabBarHeight,
+  };
+}
+
+export function ScreenScrollView(props) {
+  const { paddingTop, paddingBottom } = useScreenInsets();
+  // ...
+}
+
+or similar.
+
+⸻
+
+2. Quick fix: remove dependency on useBottomTabBarHeight
+
+Replace the useScreenInsets implementation with one that only uses safe area, no bottom tab:
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+function useScreenInsets() {
+  const insets = useSafeAreaInsets();
+
+  return {
+    paddingTop: insets.top,
+    paddingBottom: insets.bottom, // no tab bar height
+  };
+}
+
+If your file is a bit different, the idea is the same:
+	•	Delete useBottomTabBarHeight import.
+	•	Remove any calls to useBottomTabBarHeight().
+	•	Keep padding based only on useSafeAreaInsets().
+
+⸻
+
+3. If you do want special padding for tabs later
+
+Later, when/if you add a real bottom tab navigator, do it like this:
+	•	Inside each tab screen, call useBottomTabBarHeight() directly and pass the result as a prop to ScreenScrollView, instead of calling it inside ScreenScrollView itself.
+
+Example (later, not now):
+
+// In a screen that is inside a Tab.Navigator
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+
+function HomeScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
+
+  return (
+    <ScreenScrollView extraBottomPadding={tabBarHeight}>
+      {/* ... */}
+    </ScreenScrollView>
+  );
+}
+
+And then:
+
+export function ScreenScrollView({ children, extraBottomPadding = 0 }) {
+  const insets = useSafeAreaInsets();
+
+  const paddingBottom = insets.bottom + extraBottomPadding;
+
+  return (
+    <ScrollView contentContainerStyle={{ paddingBottom }}>
+      {children}
+    </ScrollView>
+  );
+}
+
+But for right now, just do the simple version: no useBottomTabBarHeight at all.
+
+⸻
+
+4. Reload the app
+
+After updating ScreenScrollView:
+	•	Stop Expo
+	•	Start it again (npm start / npx expo start)
+	•	Reload on your device/simulator
+
+That error should disappear.
+
+⸻
+
+If you paste your ScreenScrollView code here, I can rewrite it exactly so you can just copy–paste it back in.
