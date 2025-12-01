@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, Task, Conversation, Message, UserRole, TaskStatus, Rating } from "@/types";
-import { supabase, userQueries, taskQueries, messageQueries, conversationQueries, ratingQueries } from "@/services/supabase";
+import { isSupabaseAvailable, userQueries, taskQueries, messageQueries, conversationQueries, ratingQueries } from "@/services/supabase";
 
 interface AppContextType {
   user: User | null;
@@ -43,7 +43,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [ratings, setRatings] = useState<Rating[]>([]);
-  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -51,26 +50,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      // Check if Supabase is connected
-      const isConnected = await checkSupabaseConnection();
-      setIsSupabaseConnected(isConnected);
+      // Load from AsyncStorage (primary for offline support)
+      const [userData, tasksData, convsData, msgsData] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.USER),
+        AsyncStorage.getItem(STORAGE_KEYS.TASKS),
+        AsyncStorage.getItem(STORAGE_KEYS.CONVERSATIONS),
+        AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
+      ]);
 
-      if (isConnected) {
-        // Try to load from Supabase
-        await syncWithSupabase();
-      } else {
-        // Fallback to AsyncStorage
-        const [userData, tasksData, convsData, msgsData] = await Promise.all([
-          AsyncStorage.getItem(STORAGE_KEYS.USER),
-          AsyncStorage.getItem(STORAGE_KEYS.TASKS),
-          AsyncStorage.getItem(STORAGE_KEYS.CONVERSATIONS),
-          AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
-        ]);
+      if (userData) setUser(JSON.parse(userData));
+      if (tasksData) setTasks(JSON.parse(tasksData));
+      if (convsData) setConversations(JSON.parse(convsData));
+      if (msgsData) setMessages(JSON.parse(msgsData));
 
-        if (userData) setUser(JSON.parse(userData));
-        if (tasksData) setTasks(JSON.parse(tasksData));
-        if (convsData) setConversations(JSON.parse(convsData));
-        if (msgsData) setMessages(JSON.parse(msgsData));
+      // Try to sync with Supabase if available
+      if (isSupabaseAvailable) {
+        syncWithSupabase();
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -79,31 +74,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const checkSupabaseConnection = async (): Promise<boolean> => {
-    try {
-      const { data, error } = await supabase.from('users').select('count').limit(1);
-      return !error;
-    } catch {
-      return false;
-    }
-  };
-
-  const syncWithSupabase = async () => {
-    try {
-      // This will be populated when user logs in
-      // For now, just sync available tasks
-      const { data: tasksData } = await taskQueries.getTasks();
-      if (tasksData) setTasks(tasksData);
-    } catch (error) {
-      console.error("Error syncing with Supabase:", error);
-    }
-  };
-
   const saveUser = async (userData: User | null) => {
     try {
       if (userData) {
         await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
-        if (isSupabaseConnected) {
+        if (isSupabaseAvailable) {
           await userQueries.createUser(userData);
         }
       } else {
@@ -117,11 +92,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveTasks = async (tasksData: Task[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasksData));
-      if (isSupabaseConnected && tasksData.length > 0) {
-        // Sync latest task to Supabase
-        const latestTask = tasksData[0];
-        await taskQueries.createTask(latestTask);
-      }
     } catch (error) {
       console.error("Error saving tasks:", error);
     }
@@ -130,10 +100,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveConversations = async (convsData: Conversation[]) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(convsData));
-      if (isSupabaseConnected && convsData.length > 0) {
-        const latestConv = convsData[0];
-        await conversationQueries.createConversation(latestConv);
-      }
     } catch (error) {
       console.error("Error saving conversations:", error);
     }
@@ -197,10 +163,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
-
-    if (isSupabaseConnected) {
-      await taskQueries.updateTask(taskId, { status: "paid_waiting" });
-    }
   };
 
   const acceptTask = async (taskId: string) => {
@@ -214,10 +176,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
-
-    if (isSupabaseConnected) {
-      await taskQueries.updateTask(taskId, { status: "assigned", workerId: user.id, workerName: user.name });
-    }
 
     const existingConv = conversations.find(c => c.taskId === taskId);
     if (!existingConv) {
@@ -267,10 +225,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
-
-    if (isSupabaseConnected) {
-      await taskQueries.updateTask(taskId, { status: "completed", completedAt: new Date().toISOString() });
-    }
   };
 
   const sendMessage = async (taskId: string, content: string) => {
@@ -290,10 +244,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const updatedMessages = { ...messages, [taskId]: [...taskMessages, newMessage] };
     setMessages(updatedMessages);
     await saveMessages(updatedMessages);
-
-    if (isSupabaseConnected) {
-      await messageQueries.sendMessage(newMessage);
-    }
 
     const updatedConvs = conversations.map(conv =>
       conv.taskId === taskId
@@ -328,14 +278,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updatedRatings = [...ratings, newRating];
     setRatings(updatedRatings);
-
-    if (isSupabaseConnected) {
-      await ratingQueries.createRating(newRating);
-    }
   };
 
-  const syncContextWithSupabase = async () => {
-    await syncWithSupabase();
+  const syncWithSupabase = async () => {
+    if (!isSupabaseAvailable) return;
+    try {
+      // Sync available tasks from Supabase
+      const { data: tasksData } = await taskQueries.getTasks();
+      if (tasksData && tasksData.length > 0) {
+        setTasks(tasksData);
+      }
+    } catch (error) {
+      console.error("Error syncing with Supabase:", error);
+    }
   };
 
   return (
@@ -357,7 +312,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         sendMessage,
         markConversationRead,
         createRating,
-        syncWithSupabase: syncContextWithSupabase,
+        syncWithSupabase,
       }}
     >
       {children}
