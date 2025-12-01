@@ -7,6 +7,9 @@ export type RootStackParamList = {
   TaskDetail: { task: Task };
   Chat: { taskId: string; otherUserName: string };
   Payment: { task: Task };
+  CompletionPhoto: { task: Task };
+  Approval: { task: Task };
+  Rating: { task: Task };
 };
 
 export type MainTabParamList = {

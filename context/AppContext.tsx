@@ -16,7 +16,9 @@ interface AppContextType {
   createTask: (task: Omit<Task, "id" | "customerId" | "customerName" | "status" | "createdAt">) => Promise<Task>;
   payTask: (taskId: string) => Promise<void>;
   acceptTask: (taskId: string) => Promise<void>;
-  completeTask: (taskId: string) => Promise<void>;
+  markJobDone: (taskId: string, beforePhotoUrl?: string, afterPhotoUrl?: string) => Promise<void>;
+  approveJob: (taskId: string) => Promise<void>;
+  disputeJob: (taskId: string) => Promise<void>;
   sendMessage: (taskId: string, content: string) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
   createRating: (taskId: string, ratedUserId: string, score: number, review?: string) => Promise<void>;
@@ -30,6 +32,7 @@ const STORAGE_KEYS = {
   TASKS: "@citytasks_tasks",
   CONVERSATIONS: "@citytasks_conversations",
   MESSAGES: "@citytasks_messages",
+  RATINGS: "@citytasks_ratings",
 };
 
 function generateId(): string {
@@ -50,20 +53,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      // Load from AsyncStorage (primary for offline support)
-      const [userData, tasksData, convsData, msgsData] = await Promise.all([
+      const [userData, tasksData, convsData, msgsData, ratingsData] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.USER),
         AsyncStorage.getItem(STORAGE_KEYS.TASKS),
         AsyncStorage.getItem(STORAGE_KEYS.CONVERSATIONS),
         AsyncStorage.getItem(STORAGE_KEYS.MESSAGES),
+        AsyncStorage.getItem(STORAGE_KEYS.RATINGS),
       ]);
 
       if (userData) setUser(JSON.parse(userData));
       if (tasksData) setTasks(JSON.parse(tasksData));
       if (convsData) setConversations(JSON.parse(convsData));
       if (msgsData) setMessages(JSON.parse(msgsData));
+      if (ratingsData) setRatings(JSON.parse(ratingsData));
 
-      // Try to sync with Supabase if available
       if (isSupabaseAvailable) {
         syncWithSupabase();
       }
@@ -110,6 +113,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(msgsData));
     } catch (error) {
       console.error("Error saving messages:", error);
+    }
+  };
+
+  const saveRatings = async (ratingsData: Rating[]) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.RATINGS, JSON.stringify(ratingsData));
+    } catch (error) {
+      console.error("Error saving ratings:", error);
     }
   };
 
@@ -219,9 +230,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const completeTask = async (taskId: string) => {
+  const markJobDone = async (taskId: string, beforePhotoUrl?: string, afterPhotoUrl?: string) => {
+    const updatedTasks = tasks.map(task =>
+      task.id === taskId 
+        ? { 
+            ...task, 
+            status: "worker_marked_done" as TaskStatus,
+            beforePhotoUrl,
+            afterPhotoUrl,
+          } 
+        : task
+    );
+    setTasks(updatedTasks);
+    await saveTasks(updatedTasks);
+  };
+
+  const approveJob = async (taskId: string) => {
     const updatedTasks = tasks.map(task =>
       task.id === taskId ? { ...task, status: "completed" as TaskStatus, completedAt: new Date().toISOString() } : task
+    );
+    setTasks(updatedTasks);
+    await saveTasks(updatedTasks);
+  };
+
+  const disputeJob = async (taskId: string) => {
+    const updatedTasks = tasks.map(task =>
+      task.id === taskId ? { ...task, status: "disputed" as TaskStatus } : task
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
@@ -278,12 +312,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updatedRatings = [...ratings, newRating];
     setRatings(updatedRatings);
+    await saveRatings(updatedRatings);
+
+    if (isSupabaseAvailable) {
+      await ratingQueries.createRating(newRating);
+    }
   };
 
   const syncWithSupabase = async () => {
     if (!isSupabaseAvailable) return;
     try {
-      // Sync available tasks from Supabase
       const { data: tasksData } = await taskQueries.getTasks();
       if (tasksData && tasksData.length > 0) {
         setTasks(tasksData);
@@ -308,7 +346,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createTask,
         payTask,
         acceptTask,
-        completeTask,
+        markJobDone,
+        approveJob,
+        disputeJob,
         sendMessage,
         markConversationRead,
         createRating,

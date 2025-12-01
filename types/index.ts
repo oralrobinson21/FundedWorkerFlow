@@ -1,6 +1,6 @@
 export type UserRole = "customer" | "worker";
 
-export type TaskStatus = "unpaid" | "paid_waiting" | "assigned" | "completed";
+export type TaskStatus = "unpaid" | "paid_waiting" | "assigned" | "worker_marked_done" | "completed" | "disputed";
 
 export interface User {
   id: string;
@@ -29,8 +29,8 @@ export interface Task {
   workerName?: string;
   createdAt: string;
   completedAt?: string;
-  photoUrl?: string;
-  completionPhotoUrl?: string;
+  beforePhotoUrl?: string;
+  afterPhotoUrl?: string;
 }
 
 export interface Message {
