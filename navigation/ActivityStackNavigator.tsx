@@ -1,22 +1,19 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import CustomerHomeScreen from "@/screens/CustomerHomeScreen";
-import WorkerHomeScreen from "@/screens/WorkerHomeScreen";
-import { HeaderTitle } from "@/components/HeaderTitle";
+import ActivityScreen from "@/screens/ActivityScreen";
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
 import { getCommonScreenOptions } from "@/navigation/screenOptions";
-import { HomeStackParamList } from "@/navigation/types";
+import { ActivityStackParamList } from "@/navigation/types";
 
-const Stack = createNativeStackNavigator<HomeStackParamList>();
+const Stack = createNativeStackNavigator<ActivityStackParamList>();
 
-export default function HomeStackNavigator() {
+export default function ActivityStackNavigator() {
   const { theme, isDark } = useTheme();
   const { user } = useApp();
   
   const isWorker = user?.role === "worker";
-  const HomeScreen = isWorker ? WorkerHomeScreen : CustomerHomeScreen;
 
   return (
     <Stack.Navigator
@@ -25,10 +22,10 @@ export default function HomeStackNavigator() {
       }}
     >
       <Stack.Screen
-        name="Home"
-        component={HomeScreen}
+        name="Activity"
+        component={ActivityScreen}
         options={{
-          headerTitle: () => <HeaderTitle title="CityTasks" />,
+          title: isWorker ? "My Jobs" : "Activity",
         }}
       />
     </Stack.Navigator>

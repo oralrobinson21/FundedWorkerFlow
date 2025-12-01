@@ -1,194 +1,288 @@
-import { useState } from "react";
-import { StyleSheet, View, TextInput } from "react-native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import React from "react";
+import { View, StyleSheet, Pressable, Alert } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
-import { ScreenKeyboardAwareScrollView } from "@/components/ScreenKeyboardAwareScrollView";
 import { ThemedText } from "@/components/ThemedText";
-import { Button } from "@/components/Button";
+import { ScreenScrollView } from "@/components/ScreenScrollView";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Typography } from "@/constants/theme";
-import Spacer from "@/components/Spacer";
-import type { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
+import { Spacing, BorderRadius } from "@/constants/theme";
+import { useApp } from "@/context/AppContext";
+import { PLATFORM_FEE_PERCENT } from "@/types";
 
-type ProfileScreenProps = {
-  navigation: NativeStackNavigationProp<ProfileStackParamList, "Profile">;
-};
+const AVATAR_COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD"];
 
-export default function ProfileScreen({ navigation }: ProfileScreenProps) {
-  const { theme, isDark } = useTheme();
+export default function ProfileScreen() {
+  const { theme } = useTheme();
+  const { user, tasks, logout, switchRole } = useApp();
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const isWorker = user?.role === "worker";
+  
+  const completedTasks = isWorker
+    ? tasks.filter(task => task.workerId === user?.id && task.status === "completed")
+    : tasks.filter(task => task.customerId === user?.id && task.status === "completed");
 
-  const handleSubmit = () => {
-    console.log("Form submitted:", { name, email, password });
+  const totalEarnings = isWorker
+    ? completedTasks.reduce((sum, task) => sum + task.price * (1 - PLATFORM_FEE_PERCENT), 0)
+    : completedTasks.reduce((sum, task) => sum + task.price * (1 + PLATFORM_FEE_PERCENT), 0);
+
+  const handleSwitchRole = () => {
+    Alert.alert(
+      "Switch Role",
+      `Switch to ${isWorker ? "Customer" : "Helper"} mode?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Switch", onPress: switchRole },
+      ]
+    );
   };
 
-  const inputStyle = [
-    styles.input,
-    {
-      backgroundColor: theme.backgroundDefault,
-      color: theme.text,
-    },
-  ];
+  const handleLogout = () => {
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Log Out", style: "destructive", onPress: logout },
+      ]
+    );
+  };
+
+  const avatarColor = user ? AVATAR_COLORS[user.avatarIndex % 6] : AVATAR_COLORS[0];
 
   return (
-    <ScreenKeyboardAwareScrollView>
-      <View style={styles.section}>
-        <ThemedText type="h1">Heading 1</ThemedText>
-        <ThemedText type="small" style={styles.meta}>
-          32px • Bold
+    <ScreenScrollView>
+      <View style={styles.header}>
+        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+          <ThemedText type="h1" style={styles.avatarText}>
+            {user?.name.charAt(0).toUpperCase() || "U"}
+          </ThemedText>
+        </View>
+        <ThemedText type="h2" style={styles.name}>
+          {user?.name || "User"}
         </ThemedText>
+        <View style={[styles.roleBadge, { backgroundColor: isWorker ? theme.secondary : theme.primary }]}>
+          <Feather name={isWorker ? "tool" : "briefcase"} size={14} color="#FFFFFF" />
+          <ThemedText type="caption" style={styles.roleBadgeText}>
+            {isWorker ? "Helper" : "Customer"}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={[styles.statItem, { backgroundColor: theme.backgroundDefault }]}>
+          <ThemedText type="h2" style={{ color: theme.primary }}>
+            {completedTasks.length}
+          </ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            {isWorker ? "Jobs Done" : "Tasks Posted"}
+          </ThemedText>
+        </View>
+        <View style={[styles.statItem, { backgroundColor: theme.backgroundDefault }]}>
+          <ThemedText type="h2" style={{ color: theme.primary }}>
+            ${totalEarnings.toFixed(0)}
+          </ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            {isWorker ? "Earned" : "Spent"}
+          </ThemedText>
+        </View>
       </View>
 
       <View style={styles.section}>
-        <ThemedText type="h2">Heading 2</ThemedText>
-        <ThemedText type="small" style={styles.meta}>
-          28px • Bold
+        <ThemedText type="h4" style={styles.sectionTitle}>
+          Account
         </ThemedText>
+        
+        <Pressable
+          onPress={handleSwitchRole}
+          style={({ pressed }) => [
+            styles.menuItem,
+            { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
+          ]}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + "20" }]}>
+            <Feather name="repeat" size={20} color={theme.secondary} />
+          </View>
+          <View style={styles.menuContent}>
+            <ThemedText type="body">Switch to {isWorker ? "Customer" : "Helper"}</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              {isWorker ? "Post tasks and get help" : "Accept jobs and earn money"}
+            </ThemedText>
+          </View>
+          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+        </Pressable>
+
+        <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.menuItem,
+            { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
+          ]}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: theme.primary + "20" }]}>
+            <Feather name="credit-card" size={20} color={theme.primary} />
+          </View>
+          <View style={styles.menuContent}>
+            <ThemedText type="body">Payment Methods</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              Manage your cards
+            </ThemedText>
+          </View>
+          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+        </Pressable>
       </View>
 
       <View style={styles.section}>
-        <ThemedText type="h3">Heading 3</ThemedText>
-        <ThemedText type="small" style={styles.meta}>
-          24px • Semi-Bold
+        <ThemedText type="h4" style={styles.sectionTitle}>
+          Settings
         </ThemedText>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.menuItem,
+            { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
+          ]}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: theme.textSecondary + "20" }]}>
+            <Feather name="bell" size={20} color={theme.textSecondary} />
+          </View>
+          <ThemedText type="body" style={styles.menuText}>Notifications</ThemedText>
+          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+        </Pressable>
+
+        <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.menuItem,
+            { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
+          ]}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: theme.textSecondary + "20" }]}>
+            <Feather name="help-circle" size={20} color={theme.textSecondary} />
+          </View>
+          <ThemedText type="body" style={styles.menuText}>Help & Support</ThemedText>
+          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+        </Pressable>
+
+        <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.menuItem,
+            { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
+          ]}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: theme.textSecondary + "20" }]}>
+            <Feather name="shield" size={20} color={theme.textSecondary} />
+          </View>
+          <ThemedText type="body" style={styles.menuText}>Privacy Policy</ThemedText>
+          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+        </Pressable>
       </View>
 
-      <View style={styles.section}>
-        <ThemedText type="h4">Heading 4</ThemedText>
-        <ThemedText type="small" style={styles.meta}>
-          20px • Semi-Bold
-        </ThemedText>
-      </View>
-
-      <View style={styles.section}>
-        <ThemedText type="body">
-          Body text - This is the default text style for paragraphs and general
-          content.
-        </ThemedText>
-        <ThemedText type="small" style={styles.meta}>
-          16px • Regular
-        </ThemedText>
-      </View>
-
-      <View style={styles.section}>
-        <ThemedText type="small">
-          Small text - Used for captions, labels, and secondary information.
-        </ThemedText>
-        <ThemedText type="small" style={styles.meta}>
-          14px • Regular
-        </ThemedText>
-      </View>
-
-      <View style={styles.section}>
-        <ThemedText type="link">Link text - Interactive elements</ThemedText>
-        <ThemedText type="small" style={styles.meta}>
-          16px • Regular • Colored
-        </ThemedText>
-      </View>
-
-      <Spacer height={Spacing["4xl"]} />
-
-      <View style={styles.fieldContainer}>
-        <ThemedText type="small" style={styles.label}>
-          Name
-        </ThemedText>
-        <TextInput
-          style={inputStyle}
-          value={name}
-          onChangeText={setName}
-          placeholder="Enter your name"
-          placeholderTextColor={isDark ? "#9BA1A6" : "#687076"}
-          autoCapitalize="words"
-          returnKeyType="next"
-        />
-      </View>
-
-      <Spacer height={Spacing.lg} />
-
-      <View style={styles.fieldContainer}>
-        <ThemedText type="small" style={styles.label}>
-          Email
-        </ThemedText>
-        <TextInput
-          style={inputStyle}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="your.email@example.com"
-          placeholderTextColor={isDark ? "#9BA1A6" : "#687076"}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          returnKeyType="next"
-        />
-      </View>
-
-      <Spacer height={Spacing.lg} />
-
-      <View style={styles.fieldContainer}>
-        <ThemedText type="small" style={styles.label}>
-          Password
-        </ThemedText>
-        <TextInput
-          style={inputStyle}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Enter a password"
-          placeholderTextColor={isDark ? "#9BA1A6" : "#687076"}
-          secureTextEntry
-          autoCapitalize="none"
-          returnKeyType="next"
-        />
-      </View>
-
-      <Spacer height={Spacing.lg} />
-
-      <Button onPress={handleSubmit}>Submit Form</Button>
-
-      <Spacer height={Spacing["2xl"]} />
-
-      <ThemedText type="h3" style={styles.sectionTitle}>
-        Testing
-      </ThemedText>
-      <Spacer height={Spacing.md} />
-      <Button
-        onPress={() => navigation.navigate("Crash")}
-        style={styles.crashButton}
+      <Pressable
+        onPress={handleLogout}
+        style={({ pressed }) => [
+          styles.logoutButton,
+          { backgroundColor: theme.error + "15", opacity: pressed ? 0.8 : 1 },
+        ]}
       >
-        Crash App
-      </Button>
-    </ScreenKeyboardAwareScrollView>
+        <Feather name="log-out" size={20} color={theme.error} />
+        <ThemedText type="body" style={[styles.logoutText, { color: theme.error }]}>
+          Log Out
+        </ThemedText>
+      </Pressable>
+    </ScreenScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginBottom: Spacing["3xl"],
+  header: {
+    alignItems: "center",
+    marginBottom: Spacing["2xl"],
   },
-  meta: {
-    opacity: 0.5,
-    marginTop: Spacing.sm,
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.lg,
   },
-  fieldContainer: {
-    width: "100%",
+  avatarText: {
+    color: "#FFFFFF",
+    fontSize: 40,
   },
-  label: {
+  name: {
     marginBottom: Spacing.sm,
-    fontWeight: "600",
-    opacity: 0.8,
   },
-  input: {
-    height: Spacing.inputHeight,
-    borderWidth: 0,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.lg,
-    fontSize: Typography.body.fontSize,
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    gap: Spacing.xs,
+  },
+  roleBadgeText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginBottom: Spacing["2xl"],
+  },
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+  },
+  section: {
+    marginBottom: Spacing["2xl"],
   },
   sectionTitle: {
-    marginTop: Spacing.xl,
+    marginBottom: Spacing.md,
   },
-  crashButton: {
-    backgroundColor: "#FF3B30",
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    marginHorizontal: -Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  menuIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuContent: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  menuText: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  separator: {
+    height: 1,
+    marginLeft: 56,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
+  },
+  logoutText: {
+    fontWeight: "600",
   },
 });
