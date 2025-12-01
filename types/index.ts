@@ -1,15 +1,15 @@
 export type UserMode = "poster" | "helper";
-export type TaskStatus = "requested" | "offers_in" | "accepted" | "in_progress" | "completed" | "paid_out" | "canceled" | "disputed";
+export type TaskStatus = "requested" | "accepted" | "in_progress" | "completed" | "canceled" | "disputed";
 export type TaskCategory = "Cleaning" | "Moving" | "Handyman" | "Groceries" | "Other";
 export type SupportTicketStatus = "open" | "in_review" | "closed";
 export type JobOfferStatus = "pending" | "declined" | "accepted";
-export type PaymentStatus = "authorized" | "captured" | "refunded" | "failed";
 
 export interface User {
   id: string;
   name: string;
   phone?: string;
   defaultZipCode?: string;
+  accountNumber: string;
   createdAt: string;
 }
 
@@ -44,15 +44,6 @@ export interface JobOffer {
   note: string;
   proposedPrice?: number;
   status: JobOfferStatus;
-  createdAt: string;
-}
-
-export interface Payment {
-  id: string;
-  taskId: string;
-  paymentIntentId: string;
-  amount: number;
-  status: PaymentStatus;
   createdAt: string;
 }
 

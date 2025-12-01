@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, Task, JobOffer, Payment, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode } from "@/types";
+import { User, Task, JobOffer, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode } from "@/types";
 
 interface AppContextType {
   user: User | null;
@@ -8,7 +8,6 @@ interface AppContextType {
   userMode: UserMode;
   tasks: Task[];
   jobOffers: JobOffer[];
-  payments: Payment[];
   chatThreads: ChatThread[];
   chatMessages: Record<string, ChatMessage[]>;
   supportTickets: SupportTicket[];
@@ -18,8 +17,6 @@ interface AppContextType {
   createTask: (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode" | "status">) => Promise<Task>;
   sendOffer: (taskId: string, note: string, proposedPrice?: number) => Promise<void>;
   chooseHelper: (taskId: string, offerId: string) => Promise<void>;
-  authorizePayment: (taskId: string, paymentIntentId: string, amount: number) => Promise<void>;
-  capturePayment: (taskId: string) => Promise<void>;
   completeTask: (taskId: string) => Promise<void>;
   cancelTask: (taskId: string, canceledBy: "poster" | "helper") => Promise<void>;
   disputeTask: (taskId: string) => Promise<void>;
@@ -35,7 +32,6 @@ const STORAGE_KEYS = {
   USER: "@citytasks_user",
   TASKS: "@citytasks_tasks",
   JOB_OFFERS: "@citytasks_job_offers",
-  PAYMENTS: "@citytasks_payments",
   CHAT_THREADS: "@citytasks_chat_threads",
   CHAT_MESSAGES: "@citytasks_chat_messages",
   SUPPORT_TICKETS: "@citytasks_support_tickets",
@@ -52,7 +48,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [userMode, setUserModeState] = useState<UserMode>("poster");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [jobOffers, setJobOffers] = useState<JobOffer[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
@@ -63,11 +58,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
-      const [userData, tasksData, offersData, paymentsData, threadsData, msgsData, ticketsData, modeData] = await Promise.all([
+      const [userData, tasksData, offersData, threadsData, msgsData, ticketsData, modeData] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.USER),
         AsyncStorage.getItem(STORAGE_KEYS.TASKS),
         AsyncStorage.getItem(STORAGE_KEYS.JOB_OFFERS),
-        AsyncStorage.getItem(STORAGE_KEYS.PAYMENTS),
         AsyncStorage.getItem(STORAGE_KEYS.CHAT_THREADS),
         AsyncStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES),
         AsyncStorage.getItem(STORAGE_KEYS.SUPPORT_TICKETS),
@@ -77,7 +71,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (userData) setUser(JSON.parse(userData));
       if (tasksData) setTasks(JSON.parse(tasksData));
       if (offersData) setJobOffers(JSON.parse(offersData));
-      if (paymentsData) setPayments(JSON.parse(paymentsData));
       if (threadsData) setChatThreads(JSON.parse(threadsData));
       if (msgsData) setChatMessages(JSON.parse(msgsData));
       if (ticketsData) setSupportTickets(JSON.parse(ticketsData));
@@ -166,6 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       name,
       phone,
       defaultZipCode,
+      accountNumber: generateId(),
       createdAt: new Date().toISOString(),
     };
     setUser(newUser);
@@ -221,12 +215,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const updatedOffers = [...jobOffers, newOffer];
     setJobOffers(updatedOffers);
     await saveJobOffers(updatedOffers);
-
-    const updatedTasks = tasks.map(t =>
-      t.id === taskId && t.status === "requested" ? { ...t, status: "offers_in" as TaskStatus } : t
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
   };
 
   const chooseHelper = async (taskId: string, offerId: string) => {
@@ -245,12 +233,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveTasks(updatedTasks);
 
     const updatedOffers = jobOffers.map(o =>
-      o.taskId === taskId && o.id !== offerId ? { ...o, status: "declined" as any } : o.id === offerId ? { ...o, status: "accepted" as any } : o
+      o.taskId === taskId && o.id !== offerId ? { ...o, status: "declined" as JobOfferStatus } : o.id === offerId ? { ...o, status: "accepted" as JobOfferStatus } : o
     );
     setJobOffers(updatedOffers);
     await saveJobOffers(updatedOffers);
 
-    const newThread = await createChatThread(taskId, task.posterId, offer.helperId);
+    await createChatThread(taskId, task.posterId, offer.helperId);
   };
 
   const authorizePayment = async (taskId: string, paymentIntentId: string, amount: number) => {
@@ -285,14 +273,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setTasks(updatedTasks);
     await saveTasks(updatedTasks);
-    
-    await capturePayment(taskId);
-
-    const updatedPayments = payments.map(p =>
-      p.taskId === taskId ? { ...p, status: "captured" as PaymentStatus } : p
-    );
-    setPayments(updatedPayments);
-    await savePayments(updatedPayments);
   };
 
   const cancelTask = async (taskId: string, canceledBy: "poster" | "helper") => {
@@ -382,7 +362,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         userMode,
         tasks,
         jobOffers,
-        payments,
         chatThreads,
         chatMessages,
         supportTickets,
@@ -392,8 +371,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createTask,
         sendOffer,
         chooseHelper,
-        authorizePayment,
-        capturePayment,
         completeTask,
         cancelTask,
         disputeTask,

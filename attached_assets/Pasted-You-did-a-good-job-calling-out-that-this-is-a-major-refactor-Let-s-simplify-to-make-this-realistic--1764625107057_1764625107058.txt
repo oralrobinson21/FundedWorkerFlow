@@ -1,0 +1,228 @@
+You did a good job calling out that this is a major refactor.
+Let’s simplify to make this realistic for MVP and remove Stripe entirely.
+
+🔴 IMPORTANT – REMOVE STRIPE COMPLETELY FOR NOW
+	1.	Remove all Stripe-specific logic:
+	•	No card screens
+	•	No payment intents, capture, refund, or payout calls
+	•	No “enter credit card” flow at job creation or acceptance
+	2.	We are doing manual payouts only in this version:
+	•	Platform does not move money
+	•	We only show: job price, confirmation code, and helper’s accountNumber
+	•	Admin/user sends money offline (Zelle, Cash App, bank, etc.)
+
+⸻
+
+🧾 User Model – Add / Use accountNumber
+
+All users already have an account number. Use it as an internal payout ID.
+
+User fields (minimum needed):
+	•	id
+	•	name
+	•	phone
+	•	defaultZipCode
+	•	accountNumber  ← required
+	•	createdAt
+
+accountNumber can be whatever the app already uses (e.g. based on date + sequence).
+Just make sure:
+	•	It’s saved for each user
+	•	It’s readable in the UI where needed (My Jobs, Job Detail, payout instructions)
+
+⸻
+
+🧱 Task / Job Model – FINAL VERSION (no Stripe fields)
+
+Keep/ensure these fields exist for Task:
+	•	id
+	•	title
+	•	description
+	•	category
+	•	zipCode (required)
+	•	areaDescription (optional)
+	•	fullAddress (optional, only visible to poster + accepted helper)
+	•	price (number)
+	•	status:
+	•	"requested" – job posted, waiting for offers
+	•	"accepted" – poster chose a helper
+	•	"in_progress" – work started
+	•	"completed" – work done, ready to pay
+	•	"canceled" – canceled by someone
+	•	"disputed" – poster is disputing completion
+	•	posterId
+	•	helperId (nullable)
+	•	confirmationCode (unique string per job)
+	•	photosRequired (bool, default true)
+	•	createdAt
+	•	acceptedAt (nullable)
+	•	completedAt (nullable)
+	•	canceledAt (nullable)
+	•	canceledBy ("poster" | "helper" | null)
+
+No paymentIntentId, no Stripe-related fields.
+
+⸻
+
+📨 JobOffers Model – For request → offer → accept flow
+
+Add a JobOffer type/table:
+	•	id
+	•	taskId
+	•	helperId
+	•	note (string, required)
+	•	proposedPrice (optional – for now you can ignore and just use task.price)
+	•	status:
+	•	"pending"
+	•	"accepted"
+	•	"declined"
+	•	createdAt
+
+Rules:
+	•	Helpers can only create offers when:
+	•	task.status = "requested"
+	•	Poster sees a list of offers on the job detail screen (poster view).
+	•	When poster selects a helper:
+	•	Set task.helperId = chosenHelperId
+	•	Set task.status = "accepted"
+	•	Set acceptedAt = now
+	•	Mark that offer status = "accepted"
+	•	Mark all other offers for that task as status = "declined"
+	•	Create a chat thread between poster and chosen helper
+	•	Reveal fullAddress to the chosen helper
+
+⸻
+
+🌐 User Modes – Poster vs Helper
+
+You already started refactoring from roles to userMode. Please complete this:
+	•	userMode: "poster" | "helper" in AppContext
+	•	Functions:
+	•	setUserMode("poster")
+	•	setUserMode("helper")
+
+Navigation:
+	1.	Home / Mode Selector screen
+	•	Two big buttons:
+	•	“I need help” → sets userMode = "poster" and navigates to Category screen
+	•	“I’m helping” → sets userMode = "helper" and navigates to Category screen
+	2.	Category screen
+	•	Shared for both modes
+	•	On press:
+	•	If userMode = "poster" → go to CreateTaskScreen
+	•	If userMode = "helper" → go to JobListScreen (filtered by category + zip)
+
+⸻
+
+🧾 CreateTaskScreen (Poster – Job Request)
+
+Update/Create CreateTaskScreen:
+
+Fields:
+	•	Title (required)
+	•	Description (required)
+	•	Category (required – from category selection)
+	•	Zip code (required)
+	•	Area / neighborhood (optional)
+	•	Full address (optional but recommended; shown only after accept)
+	•	Price (required)
+	•	Photos required toggle (default ON)
+
+On submit:
+	•	Create a task with:
+	•	status = "requested"
+	•	posterId = currentUser.id
+	•	helperId = null
+	•	confirmationCode = random unique string
+	•	No Stripe calls
+	•	Show:
+	•	“Your request is posted. Helpers can now send offers.”
+
+Poster can post multiple jobs; nothing blocks that.
+
+⸻
+
+🔍 JobListScreen (Helper – Browse Requests)
+
+For helpers:
+	•	Top of screen:
+	•	Zip code input (required to filter)
+	•	“Update results” button
+	•	Query:
+	•	status = "requested"
+	•	category = selectedCategory
+	•	zipCode matches input (or simple equality for now)
+	•	Each job card shows:
+	•	Title
+	•	Category
+	•	Description snippet
+	•	Zip code
+	•	Area / neighborhood
+	•	Price
+
+Job detail (helper) when status = “requested”:
+	•	Show job info (no fullAddress).
+	•	Button: “Send offer”
+
+Send offer UI:
+	•	Require a note (textarea).
+	•	Optionally allow different proposedPrice (MVP can ignore and just use job price).
+	•	On submit:
+	•	Create JobOffer with:
+	•	status = "pending"
+
+⸻
+
+👤 Job Detail – Poster View (Choosing Helper)
+
+If currentUser is the poster and status = "requested":
+	•	Show job info + list of offers:
+	•	Each offer: helper name, note, createdAt
+	•	For each offer:
+	•	Button: “Choose this helper”
+
+On “Choose this helper”:
+	•	Set:
+	•	task.helperId = helperId
+	•	task.status = "accepted"
+	•	acceptedAt = now
+	•	Update JobOffers:
+	•	Selected: status = "accepted"
+	•	Others: status = "declined"
+	•	Create ChatThread for this task between poster & helper
+	•	Reveal fullAddress to helper on their Job Detail screen
+
+No payment logic here. No Stripe.
+
+⸻
+
+💬 Chat + Proof + Completion (No Stripe)
+
+You already added ChatThread and ChatMessage types. Please finish implementing:
+
+ChatThread:
+	•	id
+	•	taskId
+	•	posterId
+	•	helperId
+	•	createdAt
+	•	expiresAt (3 days after completed or accepted)
+	•	isClosed (bool)
+
+ChatMessage:
+	•	id
+	•	threadId
+	•	senderId
+	•	text (optional)
+	•	imageUrl (optional)
+	•	isProof (bool, default false)
+	•	createdAt
+
+Rules:
+	•	Only posterId and helperId can access a chatThread.
+	•	When a helper is chosen:
+	•	Create a thread (if not existing).
+	•	In UI, allow:
+	•	Text messages
+	•	Image upload
+	•	A toggle/checkbox to mark an image as proof (isProof = true)
