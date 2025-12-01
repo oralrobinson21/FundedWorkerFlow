@@ -66,8 +66,8 @@ export function TaskCard({ task, isCustomerView, onPress }: TaskCardProps) {
 
       <View style={styles.metaRow}>
         <Feather name="map-pin" size={14} color={theme.textSecondary} />
-        <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-          {task.neighborhood}
+        <ThemedText type="caption" style={{ color: theme.textSecondary }} numberOfLines={1}>
+          {task.areaDescription || task.neighborhood}
         </ThemedText>
       </View>
 

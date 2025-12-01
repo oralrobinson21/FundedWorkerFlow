@@ -132,9 +132,23 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           <View style={styles.metaRow}>
             <Feather name="map-pin" size={16} color={theme.textSecondary} />
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              {task.neighborhood}
+              {task.areaDescription || task.neighborhood}
             </ThemedText>
           </View>
+          
+          {(task.status === "assigned" || task.status === "worker_marked_done" || task.status === "completed") && task.fullAddress && isWorker ? (
+            <View style={[styles.metaRow, { marginTop: Spacing.sm, backgroundColor: theme.backgroundSecondary, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm }]}>
+              <Feather name="lock" size={14} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText type="caption" style={{ color: theme.textSecondary, marginBottom: 2 }}>
+                  Exact address (accepted helper only)
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.text, fontWeight: "500" }}>
+                  {task.fullAddress}
+                </ThemedText>
+              </View>
+            </View>
+          ) : null}
           
           <View style={styles.metaRow}>
             <Feather name="clock" size={16} color={theme.textSecondary} />
@@ -161,6 +175,15 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
             {task.description}
           </ThemedText>
         </View>
+
+        {isCustomer && task.fullAddress ? (
+          <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
+            <ThemedText type="h4" style={styles.sectionTitle}>Full Address</ThemedText>
+            <ThemedText type="body" style={{ color: theme.text, fontWeight: "500" }}>
+              {task.fullAddress}
+            </ThemedText>
+          </View>
+        ) : null}
 
         {(task.status === "assigned" || task.status === "completed") && task.workerName ? (
           <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>

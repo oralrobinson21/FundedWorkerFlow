@@ -27,12 +27,14 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
+  const [areaDescription, setAreaDescription] = useState("");
+  const [fullAddress, setFullAddress] = useState("");
   const [price, setPrice] = useState("20");
   const [timeWindow, setTimeWindow] = useState("Today, Next 3 hours");
   const [showNeighborhoodPicker, setShowNeighborhoodPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isValid = title.trim() && description.trim() && neighborhood && parseFloat(price) >= 5;
+  const isValid = title.trim() && description.trim() && neighborhood && areaDescription.trim() && fullAddress.trim() && parseFloat(price) >= 5;
 
   const handleSubmit = async () => {
     if (!isValid || isSubmitting) return;
@@ -43,6 +45,8 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
         title: title.trim(),
         description: description.trim(),
         neighborhood,
+        areaDescription: areaDescription.trim(),
+        fullAddress: fullAddress.trim(),
         price: parseFloat(price),
         timeWindow,
       });
@@ -124,6 +128,36 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             </ThemedText>
             <Feather name="chevron-down" size={20} color={theme.textSecondary} />
           </Pressable>
+        </View>
+
+        <View style={styles.field}>
+          <ThemedText type="small" style={styles.label}>Area / Neighborhood</ThemedText>
+          <TextInput
+            style={inputStyle}
+            value={areaDescription}
+            onChangeText={setAreaDescription}
+            placeholder="e.g., Bronx – 170th & Grand Concourse"
+            placeholderTextColor={theme.textSecondary}
+            maxLength={100}
+          />
+          <ThemedText type="caption" style={[styles.hint, { color: theme.textSecondary }]}>
+            This is shown to helpers before they accept
+          </ThemedText>
+        </View>
+
+        <View style={styles.field}>
+          <ThemedText type="small" style={styles.label}>Full Address</ThemedText>
+          <TextInput
+            style={inputStyle}
+            value={fullAddress}
+            onChangeText={setFullAddress}
+            placeholder="123 Main St, Apt 4B"
+            placeholderTextColor={theme.textSecondary}
+            maxLength={200}
+          />
+          <ThemedText type="caption" style={[styles.hint, { color: theme.textSecondary }]}>
+            Only shown to helper after they accept
+          </ThemedText>
         </View>
 
         <View style={styles.field}>

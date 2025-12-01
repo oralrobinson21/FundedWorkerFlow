@@ -22,6 +22,8 @@ export interface Task {
   title: string;
   description: string;
   neighborhood: string;
+  areaDescription: string | null;
+  fullAddress: string | null;
   price: number;
   timeWindow: string;
   status: TaskStatus;

@@ -180,6 +180,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customerName: user.name,
       status: "unpaid",
       createdAt: new Date().toISOString(),
+      areaDescription: taskData.areaDescription || null,
+      fullAddress: taskData.fullAddress || null,
     };
     
     const updatedTasks = [newTask, ...tasks];
