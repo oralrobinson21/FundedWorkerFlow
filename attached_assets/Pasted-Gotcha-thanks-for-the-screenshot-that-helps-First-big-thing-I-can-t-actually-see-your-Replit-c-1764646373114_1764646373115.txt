@@ -1,0 +1,281 @@
+Gotcha, thanks for the screenshot – that helps.
+
+First big thing: I can’t actually see your Replit code from that link because it’s tied to your logged-in account, so all I see is Replit’s landing page, not your project files. So I’ll treat this as:
+
+“The UI renders (profile, bottom tabs, etc.) but taps don’t do anything – I can’t switch to helper, cancel a request, or log out.”
+
+So the problem now is not Stripe, it’s wiring up the buttons + screens correctly.
+
+Let me give you concrete “drop-in” fixes you can paste into your project for:
+	1.	Profile screen actions (Switch to Helper, Logout, etc.)
+	2.	Cancel request on job detail
+	3.	A simple tap test to confirm touches are actually reaching your screen
+
+You can literally replace your files with these and then tweak names.
+
+⸻
+
+1️⃣ Fix Profile screen so buttons actually work
+
+Find your ProfileScreen (or similar) file and temporarily replace its contents with something like this:
+
+// src/screens/ProfileScreen.tsx (or .jsx)
+
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useAppContext } from '../context/AppContext'; // adjust path if needed
+
+export const ProfileScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const { user, setUserMode, logout } = useAppContext();
+
+  const onSwitchToHelper = () => {
+    console.log('Switch to Helper pressed');
+    setUserMode('helper');
+    navigation.navigate('Home'); // or 'HelperHome' if you have a separate route
+  };
+
+  const onPaymentMethods = () => {
+    Alert.alert('Coming soon', 'Payment methods screen is not wired yet.');
+  };
+
+  const onNotifications = () => {
+    Alert.alert('Coming soon', 'Notifications are not wired yet.');
+  };
+
+  const onHelpSupport = () => {
+    // if you have a HelpSupport screen registered in your navigator:
+    navigation.navigate('HelpSupport');
+  };
+
+  const onPrivacyPolicy = () => {
+    navigation.navigate('PrivacyPolicy'); // or open a web URL
+  };
+
+  const onLogout = () => {
+    console.log('Logout pressed');
+    logout(); // clear auth in context / storage
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Auth' }], // whatever your login stack is called
+    });
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Profile</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account</Text>
+
+        <TouchableOpacity style={styles.row} onPress={onSwitchToHelper}>
+          <Text style={styles.rowTitle}>Switch to Helper</Text>
+          <Text style={styles.rowSubtitle}>Accept jobs and earn money</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.row} onPress={onPaymentMethods}>
+          <Text style={styles.rowTitle}>Payment Methods</Text>
+          <Text style={styles.rowSubtitle}>Manage your cards</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Settings</Text>
+
+        <TouchableOpacity style={styles.row} onPress={onNotifications}>
+          <Text style={styles.rowTitle}>Notifications</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.row} onPress={onHelpSupport}>
+          <Text style={styles.rowTitle}>Help & Support</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.row} onPress={onPrivacyPolicy}>
+          <Text style={styles.rowTitle}>Privacy Policy</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+        <Text style={styles.logoutText}>Log Out</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 24 },
+  title: { fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 16 },
+  section: { marginTop: 16 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#aaa' },
+  row: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#333' },
+  rowTitle: { fontSize: 16, color: 'white' },
+  rowSubtitle: { fontSize: 13, color: '#999', marginTop: 4 },
+  logoutButton: {
+    marginTop: 'auto',
+    marginBottom: 24,
+    paddingVertical: 14,
+    borderRadius: 8,
+    backgroundColor: '#b00020',
+  },
+  logoutText: { textAlign: 'center', color: 'white', fontWeight: '600' },
+});
+
+After you paste this:
+	•	Reload the app.
+	•	Tap Switch to Helper → you should see a console.log in your logs and be navigated.
+	•	Tap Log Out → app should go back to login/OTP.
+
+If you see the console logs appearing but navigation doesn’t move, the problem is in your navigator (stack/tab names); you’d then just adjust navigation.navigate('Home') / 'Auth' to match.
+
+⸻
+
+2️⃣ Add a working “Cancel Request” button on job detail
+
+Now fix cancelling.
+
+Find your JobDetailScreen (or similar) and add something like this near the bottom of your component:
+
+// inside JobDetailScreen component
+
+import { Alert, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { useAppContext } from '../context/AppContext';
+
+export const JobDetailScreen = ({ route }) => {
+  const { taskId } = route.params;
+  const { tasks, user, cancelTask } = useAppContext();
+
+  const task = tasks.find(t => t.id === taskId);
+
+  if (!task) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Task not found.</Text>
+      </View>
+    );
+  }
+
+  const canCancel =
+    (task.status === 'requested' || task.status === 'accepted') &&
+    task.posterId === user?.id;
+
+  const handleCancel = () => {
+    Alert.alert(
+      'Cancel job',
+      'Are you sure you want to cancel this job?',
+      [
+        { text: 'No' },
+        {
+          text: 'Yes, cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('Cancelling task', task.id);
+              await cancelTask(task.id);
+            } catch (err) {
+              console.error(err);
+              Alert.alert('Error', 'Could not cancel job. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* your existing job content here */}
+
+      {canCancel && (
+        <TouchableOpacity style={cancelStyles.button} onPress={handleCancel}>
+          <Text style={cancelStyles.text}>Cancel Request</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
+const cancelStyles = StyleSheet.create({
+  button: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#b00020',
+  },
+  text: { textAlign: 'center', color: 'white', fontWeight: '600' },
+});
+
+And make sure cancelTask in your AppContext actually calls the backend:
+
+// in AppContext
+
+const cancelTask = async (taskId: string) => {
+  await fetch(`${API_BASE_URL}/api/tasks/${taskId}/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  setState(prev => ({
+    ...prev,
+    tasks: prev.tasks.map(t =>
+      t.id === taskId ? { ...t, status: 'canceled' } : t
+    ),
+  }));
+};
+
+(Use whatever auth/token system you have.)
+
+⸻
+
+3️⃣ Sanity check: are touches even reaching the screen?
+
+If after wiring onPress and Alert.alert() nothing fires, then there’s probably an invisible overlay blocking touches.
+
+Do this quick test:
+
+In ProfileScreen, replace everything with:
+
+import React from 'react';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
+
+export const ProfileScreen = () => {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <TouchableOpacity
+        onPress={() => Alert.alert('Tap works', 'You tapped the button!')}
+        style={{ padding: 20, backgroundColor: 'lime' }}
+      >
+        <Text>TEST TAP</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+Reload app:
+	•	If you tap the green button and no alert pops, something global is eating events:
+	•	A full-screen overlay with position: 'absolute' + pointerEvents="auto"
+	•	Or some strange wrapper.
+
+In that case, check your root layout (the component that wraps tabs) and make sure you don’t have a full-screen View on top.
+
+If the TEST TAP alert does pop, then the problem was just missing onPress handlers, and you can revert to the wired ProfileScreen above.
+
+⸻
+
+What to do next, in order
+	1.	Paste the very simple TEST TAP ProfileScreen and confirm taps work at all.
+	2.	Replace with the full ProfileScreen w/real onPress handlers.
+	3.	Add cancel button logic to JobDetailScreen.
+	4.	Test:
+	•	Log out and re-login.
+	•	Switch to helper.
+	•	Cancel one of your own jobs.
+
+If you’d like, you can copy-paste just your current ProfileScreen code into the next message and I’ll surgically rewrite it so everything is wired and you can drop it back in.

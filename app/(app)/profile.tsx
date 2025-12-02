@@ -1,27 +1,56 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { useApp } from "@/context/AppContext";
+import Feather from "@expo/vector-icons/Feather";
 
 export default function ProfileScreen() {
   const { user, logout } = useApp();
   const router = useRouter();
 
-  const handleSwitchMode = () => {
-    router.replace("/(app)/mode-selector");
+  const handleSwitchMode = async () => {
+    console.log("🔄 Switch Mode pressed");
+    try {
+      router.replace("/(app)/mode-selector");
+    } catch (err) {
+      console.error("Switch mode error:", err);
+      Alert.alert("Error", "Could not switch mode");
+    }
+  };
+
+  const handlePaymentMethods = () => {
+    console.log("💳 Payment Methods pressed");
+    Alert.alert("Coming Soon", "Payment methods will be available soon.");
+  };
+
+  const handleHelpSupport = () => {
+    console.log("❓ Help & Support pressed");
+    Alert.alert("Help & Support", "Support information coming soon.");
+  };
+
+  const handlePrivacyPolicy = () => {
+    console.log("🔒 Privacy Policy pressed");
+    Alert.alert("Privacy Policy", "Our privacy policy is coming soon.");
   };
 
   const handleLogout = () => {
+    console.log("🚪 Logout pressed");
     Alert.alert("Log Out", "Are you sure you want to log out?", [
-      { text: "Cancel" },
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
       {
         text: "Log Out",
         style: "destructive",
         onPress: async () => {
           try {
+            console.log("🚪 Executing logout...");
             await logout();
+            console.log("🚪 Logout complete, navigating to login");
             router.replace("/(auth)/login");
           } catch (err) {
+            console.error("Logout error:", err);
             Alert.alert("Error", "Failed to log out");
           }
         },
@@ -30,41 +59,62 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Profile</Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Profile</Text>
+      </View>
 
       {user && (
-        <View style={styles.userInfo}>
-          <Text style={styles.label}>Email</Text>
-          <Text style={styles.value}>{user.email}</Text>
+        <View style={styles.userCard}>
+          <Text style={styles.userEmail}>{user.email}</Text>
+          <Text style={styles.userSubtext}>Account ID: {user.id.substring(0, 8)}</Text>
         </View>
       )}
 
       <View style={styles.section}>
-        <Pressable style={styles.button} onPress={handleSwitchMode}>
-          <Text style={styles.buttonText}>Switch Mode</Text>
-          <Text style={styles.buttonSubtext}>Switch between poster and helper</Text>
-        </Pressable>
+        <Text style={styles.sectionTitle}>Account Settings</Text>
 
-        <Pressable style={styles.button} onPress={() => Alert.alert("Coming Soon", "Payment methods will be available soon.")}>
-          <Text style={styles.buttonText}>Payment Methods</Text>
-          <Text style={styles.buttonSubtext}>Manage your payment options</Text>
-        </Pressable>
+        <TouchableOpacity style={styles.button} onPress={handleSwitchMode} activeOpacity={0.7}>
+          <Feather name="repeat" size={20} color="#333" style={styles.icon} />
+          <View style={styles.buttonContent}>
+            <Text style={styles.buttonTitle}>Switch Mode</Text>
+            <Text style={styles.buttonSubtitle}>Switch between poster and helper</Text>
+          </View>
+        </TouchableOpacity>
 
-        <Pressable style={styles.button} onPress={() => Alert.alert("Help & Support", "Support information coming soon.")}>
-          <Text style={styles.buttonText}>Help & Support</Text>
-          <Text style={styles.buttonSubtext}>Get help with your account</Text>
-        </Pressable>
-
-        <Pressable style={styles.button} onPress={() => Alert.alert("Privacy Policy", "Our privacy policy is coming soon.")}>
-          <Text style={styles.buttonText}>Privacy Policy</Text>
-          <Text style={styles.buttonSubtext}>View our privacy terms</Text>
-        </Pressable>
+        <TouchableOpacity style={styles.button} onPress={handlePaymentMethods} activeOpacity={0.7}>
+          <Feather name="credit-card" size={20} color="#333" style={styles.icon} />
+          <View style={styles.buttonContent}>
+            <Text style={styles.buttonTitle}>Payment Methods</Text>
+            <Text style={styles.buttonSubtitle}>Manage payment options</Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
-      <Pressable style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
-        <Text style={[styles.buttonText, styles.logoutText]}>Log Out</Text>
-      </Pressable>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Support</Text>
+
+        <TouchableOpacity style={styles.button} onPress={handleHelpSupport} activeOpacity={0.7}>
+          <Feather name="help-circle" size={20} color="#333" style={styles.icon} />
+          <View style={styles.buttonContent}>
+            <Text style={styles.buttonTitle}>Help & Support</Text>
+            <Text style={styles.buttonSubtitle}>Get help with your account</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.button} onPress={handlePrivacyPolicy} activeOpacity={0.7}>
+          <Feather name="shield" size={20} color="#333" style={styles.icon} />
+          <View style={styles.buttonContent}>
+            <Text style={styles.buttonTitle}>Privacy Policy</Text>
+            <Text style={styles.buttonSubtitle}>View our privacy terms</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+        <Feather name="log-out" size={20} color="#fff" style={{ marginRight: 8 }} />
+        <Text style={styles.logoutText}>Log Out</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -72,16 +122,19 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f8f8",
-    padding: 20,
+    backgroundColor: "#f5f5f5",
+    paddingHorizontal: 16,
+  },
+  header: {
+    paddingTop: 20,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 24,
-    marginTop: 16,
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#000",
   },
-  userInfo: {
+  userCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
@@ -89,45 +142,67 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e0e0e0",
   },
-  label: {
-    fontSize: 12,
-    color: "#999",
+  userEmail: {
+    fontSize: 16,
     fontWeight: "600",
+    color: "#333",
     marginBottom: 4,
   },
-  value: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "500",
+  userSubtext: {
+    fontSize: 13,
+    color: "#999",
   },
   section: {
     marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#999",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   button: {
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#e0e0e0",
   },
-  buttonText: {
+  icon: {
+    marginRight: 12,
+  },
+  buttonContent: {
+    flex: 1,
+  },
+  buttonTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
     marginBottom: 4,
   },
-  buttonSubtext: {
+  buttonSubtitle: {
     fontSize: 13,
     color: "#999",
   },
   logoutButton: {
     backgroundColor: "#ff4444",
-    borderColor: "#ff4444",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     marginBottom: 40,
+    marginTop: 16,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
   },
   logoutText: {
     color: "#fff",
-    marginBottom: 0,
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

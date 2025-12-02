@@ -60,6 +60,7 @@ export default function JobDetailScreen() {
   };
 
   const handleCancel = () => {
+    console.log("❌ Cancel job pressed for task:", taskId);
     Alert.alert("Cancel Job", "Are you sure you want to cancel this job?", [
       { text: "No" },
       {
@@ -68,11 +69,14 @@ export default function JobDetailScreen() {
         onPress: async () => {
           setLoading(true);
           try {
+            console.log("❌ Canceling task:", taskId);
             await cancelTask(taskId || "", "poster");
+            console.log("❌ Task canceled successfully");
             Alert.alert("Success", "Job cancelled");
             router.back();
           } catch (err) {
-            Alert.alert("Error", "Failed to cancel job");
+            console.error("Cancel error:", err);
+            Alert.alert("Error", "Failed to cancel job. " + (err instanceof Error ? err.message : ""));
           } finally {
             setLoading(false);
           }
