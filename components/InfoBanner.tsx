@@ -112,27 +112,21 @@ export function CheckoutExplanation() {
   return (
     <View style={[styles.explanationContainer, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
       <View style={styles.explanationRow}>
-        <Feather name="shield" size={16} color={theme.success} />
-        <ThemedText type="caption" style={{ color: theme.text, flex: 1, marginLeft: Spacing.sm }}>
-          You are not charged until you choose a helper.
-        </ThemedText>
-      </View>
-      <View style={styles.explanationRow}>
         <Feather name="lock" size={16} color={theme.success} />
         <ThemedText type="caption" style={{ color: theme.text, flex: 1, marginLeft: Spacing.sm }}>
-          CityTasks holds your payment securely and only releases funds after both sides confirm the job is completed.
+          Your payment is held securely by CityTasks and only released after both sides confirm the job is done.
         </ThemedText>
       </View>
       <View style={styles.explanationRow}>
         <Feather name="percent" size={16} color={theme.primary} />
         <ThemedText type="caption" style={{ color: theme.text, flex: 1, marginLeft: Spacing.sm }}>
-          CityTasks takes a 15% service fee from the posted job price.
+          15% service fee is included in the total shown above.
         </ThemedText>
       </View>
       <View style={styles.explanationRow}>
         <Feather name="heart" size={16} color={theme.primary} />
         <ThemedText type="caption" style={{ color: theme.text, flex: 1, marginLeft: Spacing.sm }}>
-          Tips always go 100% to the helper.
+          Tips after completion go 100% to the helper.
         </ThemedText>
       </View>
     </View>
