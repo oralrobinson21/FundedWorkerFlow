@@ -26,7 +26,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const { task: initialTask } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, userMode, tasks, chatThreads, completeTask, sendOffer } = useApp();
+  const { user, userMode, tasks, chatThreads, completeTask, sendOffer, hasProfilePhoto } = useApp();
 
   const allTasks = tasks ?? [];
   const allThreads = chatThreads ?? [];
@@ -36,7 +36,23 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const isHelper = task.helperId === user?.id;
   const isMyTask = isPoster || isHelper;
 
-  const handleSendOffer = () => {
+  const handleSendOffer = async () => {
+    const hasPhoto = await hasProfilePhoto();
+    if (!hasPhoto) {
+      Alert.alert(
+        "Profile Photo Required",
+        "Please add a profile photo before sending offers. This helps build trust with posters.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Add Photo", 
+            onPress: () => navigation.navigate("MainTabs", { screen: "Profile" } as any) 
+          },
+        ]
+      );
+      return;
+    }
+    
     Alert.alert(
       "Send an Offer",
       `Would you like to offer your help for "${task.title}"?`,

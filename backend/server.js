@@ -273,6 +273,10 @@ app.post('/api/tasks', async (req, res) => {
     const user = await getAuthUser(req);
     const { title, description, category, zipCode, areaDescription, fullAddress, price, photosRequired, toolsRequired, toolsProvided, taskPhotoUrl } = req.body;
 
+    if (!user.profile_photo_url) {
+      return res.status(400).json({ error: 'Profile photo required to post tasks' });
+    }
+
     const MIN_PRICE = parseFloat(process.env.MIN_JOB_PRICE_USD || '7');
     if (price < MIN_PRICE) {
       return res.status(400).json({ error: `Minimum job price is $${MIN_PRICE.toFixed(2)}` });
@@ -388,6 +392,10 @@ app.post('/api/tasks/:taskId/offers', async (req, res) => {
     const user = await getAuthUser(req);
     const { taskId } = req.params;
     const { note, proposedPrice } = req.body;
+
+    if (!user.profile_photo_url) {
+      return res.status(400).json({ error: 'Profile photo required to send offers' });
+    }
 
     const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
     const task = taskResult.rows[0];

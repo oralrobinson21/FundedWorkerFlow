@@ -24,7 +24,7 @@ const neighborhoods = NEIGHBORHOODS ?? [];
 export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
-  const { createTask } = useApp();
+  const { createTask, user, hasProfilePhoto } = useApp();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -45,6 +45,22 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
 
   const handleSubmit = async () => {
     if (!isValid || isSubmitting) return;
+    
+    const hasPhoto = await hasProfilePhoto();
+    if (!hasPhoto) {
+      Alert.alert(
+        "Profile Photo Required",
+        "Please add a profile photo before posting a task. This helps build trust with helpers.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Add Photo", 
+            onPress: () => navigation.navigate("MainTabs", { screen: "Profile" } as any) 
+          },
+        ]
+      );
+      return;
+    }
     
     setIsSubmitting(true);
     try {

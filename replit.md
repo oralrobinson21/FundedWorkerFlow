@@ -11,7 +11,7 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 
 ## Current Status
 
-### ✅ Completed MVP
+### ✅ Completed MVP Features
 - Email + OTP authentication system with LoginScreen and VerifyScreen
 - User mode selection (poster/helper) with OnboardingScreen
 - Standardized terminology: poster/helper throughout (not customer/worker)
@@ -20,16 +20,25 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - Screens: LoginScreen, VerifyScreen, OnboardingScreen, CategoryScreen, CreateTaskScreen, JobListScreen, TaskDetailScreen, ProfileScreen, MessagesScreen
 - Full backend API integration with proper URL routing
 
+### ✅ Recent Updates
+- **13 Job Categories**: Cleaning & Housekeeping, Moving & Heavy Lifting, Delivery & Pickups, Handyman & Repairs, Yardwork & Outdoors, Errands & Small Tasks, Tech Help, Pet Care, Car Help, Home Organizing, Babysitting & Senior Help, Beauty & Personal Services, Other
+- **Tools Required/Provided**: Boolean fields on tasks for job matching
+- **Profile Photo Requirement**: Enforced in UI and backend before posting tasks or sending offers
+- **Job Filtering**: Helpers can filter by category, zip code, and tools required/provided
+- **Activity Logging**: All major actions tracked in activity_logs table
+- **Profile Photo Upload**: Camera and gallery photo picker in ProfileScreen
+
 ### ✅ Backend Implementation
 - Express server on port 5000 with all endpoints
 - Stripe Connect Express onboarding for helpers
-- Task creation with $7 minimum enforcement
-- Offer system
+- Task creation with $7 minimum enforcement + profile photo validation
+- Offer system with profile photo validation
 - Stripe Checkout Session creation
 - Webhook handler for payment success
 - Chat system with proof photos
 - Task completion with photo validation
 - Cancel/dispute endpoints
+- Activity logging system
 
 ## Payment Flow
 1. Poster creates job (≥$7) → status="requested"
@@ -67,20 +76,33 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - POST /api/auth/send-otp - Send OTP to email
 - POST /api/auth/verify-otp - Verify OTP and create/return user
 - GET /api/tasks - List available tasks (with zipCode filtering)
-- POST /api/tasks - Create a new task
-- POST /api/offers - Submit offer on a task
-- POST /api/checkout - Create Stripe Checkout session
+- POST /api/tasks - Create a new task (requires profile photo)
+- POST /api/tasks/:taskId/offers - Submit offer (requires profile photo)
+- POST /api/tasks/:taskId/choose-helper - Choose helper and create checkout
 - POST /api/stripe-webhook - Handle Stripe payment events
 - POST /api/chats/:chatId/messages - Send chat message
 - POST /api/tasks/:taskId/complete - Mark task complete with proof
+- PUT /api/users/:userId/photo - Update profile photo
+- GET /api/users/:userId/has-photo - Check if user has profile photo
+- GET /api/activity-logs - Get activity logs
+
+## Database Tables
+- users - User accounts with profile_photo_url
+- tasks - Job postings with tools_required, tools_provided
+- offers - Helper offers with helper_photo_url
+- chat_threads - Chat conversations
+- chat_messages - Individual messages
+- activity_logs - Event tracking
 
 ## Dev Notes
 - OTP codes logged to console as: `[DEV] OTP Code for {email}: {code}`
 - All Stripe operations use test mode during development
 - For native/Expo Go builds, set EXPO_PUBLIC_API_URL to the backend's public URL
 - The backend must be started separately: `cd backend && node server.js`
+- Profile photos stored as local URIs (works in Expo Go)
 
 ## Testing
 - Auth flow tested and working (onboarding → email → OTP → verification)
 - Backend health check returns 200
 - Frontend-backend connectivity verified via automated tests
+- Profile photo enforcement tested in UI
