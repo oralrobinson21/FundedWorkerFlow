@@ -134,6 +134,7 @@ async function initDatabase() {
         BEGIN ALTER TABLE tasks ADD COLUMN tip_stripe_payment_intent_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN tip_created_at TIMESTAMP; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN extra_amount_paid DECIMAL(10,2) DEFAULT 0; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN photos TEXT[] DEFAULT '{}'; EXCEPTION WHEN duplicate_column THEN NULL; END;
       END $$;
     `);
     console.log('Database tables initialized');

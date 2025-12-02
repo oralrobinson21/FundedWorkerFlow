@@ -323,7 +323,7 @@ app.get('/api/stripe/connect/status', async (req, res) => {
 app.post('/api/tasks', async (req, res) => {
   try {
     const user = await getAuthUser(req);
-    const { title, description, category, zipCode, areaDescription, fullAddress, price, photosRequired, toolsRequired, toolsProvided, taskPhotoUrl } = req.body;
+    const { title, description, category, zipCode, areaDescription, fullAddress, price, photosRequired, toolsRequired, toolsProvided, taskPhotoUrl, photos } = req.body;
 
     if (!user.profile_photo_url) {
       return res.status(400).json({ error: 'Profile photo required to post tasks' });
@@ -334,18 +334,20 @@ app.post('/api/tasks', async (req, res) => {
       return res.status(400).json({ error: `Minimum job price is $${MIN_PRICE.toFixed(2)}` });
     }
 
+    const taskPhotos = Array.isArray(photos) ? photos.slice(0, 10) : [];
+
     const taskId = generateId();
     const confirmationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     await pool.query(`
       INSERT INTO tasks (id, title, description, category, zip_code, area_description, full_address, 
-        price, poster_id, poster_name, poster_email, poster_photo_url, confirmation_code, photos_required, tools_required, tools_provided, task_photo_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        price, poster_id, poster_name, poster_email, poster_photo_url, confirmation_code, photos_required, tools_required, tools_provided, task_photo_url, photos)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
     `, [taskId, title, description, category, zipCode, areaDescription, fullAddress, 
         price, user.id, user.name || 'Anonymous', user.email, user.profile_photo_url, confirmationCode, 
-        photosRequired || false, toolsRequired || false, toolsProvided || false, taskPhotoUrl]);
+        photosRequired || false, toolsRequired || false, toolsProvided || false, taskPhotoUrl, taskPhotos]);
 
-    await logActivity('task_created', user.id, taskId, null, { title, category, price });
+    await logActivity('task_created', user.id, taskId, null, { title, category, price, photoCount: taskPhotos.length });
 
     const result = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
     res.json(result.rows[0]);
