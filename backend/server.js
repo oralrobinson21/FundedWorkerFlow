@@ -57,45 +57,92 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       const taskId = session.metadata.taskId;
-      const helperId = session.metadata.helperId;
+      const paymentType = session.metadata.type;
+      const paymentIntentId = session.payment_intent;
 
-      const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
-      const task = taskResult.rows[0];
-      
-      if (task) {
-        const paymentIntentId = session.payment_intent;
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-        const chargeId = paymentIntent.latest_charge;
+      // Handle extra work payment
+      if (paymentType === 'extra_work') {
+        const extraWorkRequestId = session.metadata.extraWorkRequestId;
+        const requestResult = await pool.query('SELECT * FROM extra_work_requests WHERE id = $1', [extraWorkRequestId]);
+        const extraRequest = requestResult.rows[0];
 
-        const helperResult = await pool.query('SELECT * FROM users WHERE id = $1', [helperId]);
-        const helper = helperResult.rows[0];
+        if (extraRequest) {
+          await pool.query(`
+            UPDATE extra_work_requests 
+            SET status = 'paid', paid_at = NOW(), stripe_payment_intent_id = $1
+            WHERE id = $2
+          `, [paymentIntentId, extraWorkRequestId]);
+
+          // Update task with extra amount paid
+          await pool.query(`
+            UPDATE tasks 
+            SET extra_amount_paid = COALESCE(extra_amount_paid, 0) + $1
+            WHERE id = $2
+          `, [extraRequest.amount, taskId]);
+
+          await logActivity('extra_work_paid', null, taskId, null, { 
+            requestId: extraWorkRequestId, 
+            amount: extraRequest.amount 
+          });
+
+          console.log(`Extra work ${extraWorkRequestId} paid for task ${taskId}`);
+        }
+      }
+      // Handle tip payment
+      else if (paymentType === 'tip') {
+        const tipAmount = parseFloat(session.metadata.tipAmount);
 
         await pool.query(`
-          UPDATE tasks SET 
-            status = 'accepted',
-            helper_id = $1,
-            helper_name = $2,
-            accepted_at = NOW(),
-            stripe_payment_intent_id = $3,
-            stripe_charge_id = $4,
-            payment_status = 'paid'
-          WHERE id = $5
-        `, [helperId, helper?.name || 'Helper', paymentIntentId, chargeId, taskId]);
+          UPDATE tasks 
+          SET tip_amount = $1, tip_stripe_payment_intent_id = $2, tip_created_at = NOW()
+          WHERE id = $3
+        `, [tipAmount, paymentIntentId, taskId]);
 
-        // Decline other offers
-        await pool.query(`
-          UPDATE offers SET status = 'declined'
-          WHERE task_id = $1 AND helper_id != $2
-        `, [taskId, helperId]);
+        await logActivity('tip_added', null, taskId, null, { amount: tipAmount });
 
-        // Create chat thread
-        const chatThreadId = generateId();
-        await pool.query(`
-          INSERT INTO chat_threads (id, task_id, poster_id, helper_id, expires_at)
-          VALUES ($1, $2, $3, $4, NOW() + INTERVAL '3 days')
-        `, [chatThreadId, taskId, task.poster_id, helperId]);
+        console.log(`Tip of $${tipAmount} added to task ${taskId}`);
+      }
+      // Handle original task payment (helper selection)
+      else {
+        const helperId = session.metadata.helperId;
 
-        console.log(`Job ${taskId} accepted, payment confirmed, chat created`);
+        const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+        const task = taskResult.rows[0];
+        
+        if (task) {
+          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          const chargeId = paymentIntent.latest_charge;
+
+          const helperResult = await pool.query('SELECT * FROM users WHERE id = $1', [helperId]);
+          const helper = helperResult.rows[0];
+
+          await pool.query(`
+            UPDATE tasks SET 
+              status = 'accepted',
+              helper_id = $1,
+              helper_name = $2,
+              accepted_at = NOW(),
+              stripe_payment_intent_id = $3,
+              stripe_charge_id = $4,
+              payment_status = 'paid'
+            WHERE id = $5
+          `, [helperId, helper?.name || 'Helper', paymentIntentId, chargeId, taskId]);
+
+          // Decline other offers
+          await pool.query(`
+            UPDATE offers SET status = 'declined'
+            WHERE task_id = $1 AND helper_id != $2
+          `, [taskId, helperId]);
+
+          // Create chat thread
+          const chatThreadId = generateId();
+          await pool.query(`
+            INSERT INTO chat_threads (id, task_id, poster_id, helper_id, expires_at)
+            VALUES ($1, $2, $3, $4, NOW() + INTERVAL '3 days')
+          `, [chatThreadId, taskId, task.poster_id, helperId]);
+
+          console.log(`Job ${taskId} accepted, payment confirmed, chat created`);
+        }
       }
     }
 
@@ -750,6 +797,248 @@ app.get('/api/stripe/config', async (req, res) => {
   try {
     const publishableKey = await getStripePublishableKey();
     res.json({ publishableKey });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ 10. EXTRA WORK REQUEST - CREATE ⸻
+app.post('/api/tasks/:taskId/extra-work', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+    const { taskId } = req.params;
+    const { amount, reason, photoUrls } = req.body;
+
+    const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+    const task = taskResult.rows[0];
+    
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.helper_id !== user.id) {
+      return res.status(403).json({ error: 'Only helper can request extra work' });
+    }
+    if (task.status !== 'accepted' && task.status !== 'in_progress') {
+      return res.status(400).json({ error: 'Task must be in progress for extra work request' });
+    }
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid amount required' });
+    }
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({ error: 'Reason required for extra work request' });
+    }
+
+    const requestId = generateId();
+    await pool.query(`
+      INSERT INTO extra_work_requests (id, task_id, helper_id, amount, reason, photo_urls, status)
+      VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+    `, [requestId, taskId, user.id, amount, reason, photoUrls || []]);
+
+    await logActivity('extra_work_requested', user.id, taskId, null, { amount, reason, requestId });
+
+    const result = await pool.query('SELECT * FROM extra_work_requests WHERE id = $1', [requestId]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ GET EXTRA WORK REQUESTS FOR TASK ⸻
+app.get('/api/tasks/:taskId/extra-work', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM extra_work_requests WHERE task_id = $1 ORDER BY created_at DESC',
+      [taskId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ 11. EXTRA WORK REQUEST - ACCEPT (creates Stripe Checkout) ⸻
+app.post('/api/extra-work/:requestId/accept', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+    const { requestId } = req.params;
+
+    const requestResult = await pool.query('SELECT * FROM extra_work_requests WHERE id = $1', [requestId]);
+    const extraRequest = requestResult.rows[0];
+    
+    if (!extraRequest) return res.status(404).json({ error: 'Extra work request not found' });
+    if (extraRequest.status !== 'pending') {
+      return res.status(400).json({ error: 'Request already responded to' });
+    }
+
+    const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [extraRequest.task_id]);
+    const task = taskResult.rows[0];
+    
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.poster_id !== user.id) {
+      return res.status(403).json({ error: 'Only poster can accept extra work request' });
+    }
+
+    const stripe = await getStripeClient();
+    const PLATFORM_FEE = parseFloat(process.env.PLATFORM_FEE_PERCENT || '15') / 100;
+    const amountCents = Math.round(parseFloat(extraRequest.amount) * 100);
+    const platformFeeCents = Math.round(amountCents * PLATFORM_FEE);
+
+    const helperResult = await pool.query('SELECT stripe_account_id FROM users WHERE id = $1', [extraRequest.helper_id]);
+    const helperStripeAccountId = helperResult.rows[0]?.stripe_account_id;
+
+    const sessionParams = {
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `Extra Work: ${task.title}`,
+            description: extraRequest.reason.substring(0, 500),
+          },
+          unit_amount: amountCents,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${process.env.APP_URL || 'http://localhost:8081'}/task/${task.id}?extra_paid=true`,
+      cancel_url: `${process.env.APP_URL || 'http://localhost:8081'}/task/${task.id}?extra_cancelled=true`,
+      metadata: {
+        taskId: task.id,
+        extraWorkRequestId: requestId,
+        type: 'extra_work',
+      },
+    };
+
+    if (helperStripeAccountId) {
+      sessionParams.payment_intent_data = {
+        application_fee_amount: platformFeeCents,
+        transfer_data: {
+          destination: helperStripeAccountId,
+        },
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    await pool.query(`
+      UPDATE extra_work_requests 
+      SET status = 'accepted', responded_at = NOW(), stripe_checkout_session_id = $1
+      WHERE id = $2
+    `, [session.id, requestId]);
+
+    await logActivity('extra_work_accepted', user.id, task.id, null, { requestId, amount: extraRequest.amount });
+
+    res.json({ checkoutUrl: session.url, sessionId: session.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ 12. EXTRA WORK REQUEST - DECLINE ⸻
+app.post('/api/extra-work/:requestId/decline', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+    const { requestId } = req.params;
+
+    const requestResult = await pool.query('SELECT * FROM extra_work_requests WHERE id = $1', [requestId]);
+    const extraRequest = requestResult.rows[0];
+    
+    if (!extraRequest) return res.status(404).json({ error: 'Extra work request not found' });
+    if (extraRequest.status !== 'pending') {
+      return res.status(400).json({ error: 'Request already responded to' });
+    }
+
+    const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [extraRequest.task_id]);
+    const task = taskResult.rows[0];
+    
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.poster_id !== user.id) {
+      return res.status(403).json({ error: 'Only poster can decline extra work request' });
+    }
+
+    await pool.query(`
+      UPDATE extra_work_requests SET status = 'rejected', responded_at = NOW()
+      WHERE id = $1
+    `, [requestId]);
+
+    await logActivity('extra_work_rejected', user.id, task.id, null, { requestId, amount: extraRequest.amount });
+
+    const result = await pool.query('SELECT * FROM extra_work_requests WHERE id = $1', [requestId]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ 13. TIP - CREATE CHECKOUT ⸻
+app.post('/api/tasks/:taskId/tip', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+    const { taskId } = req.params;
+    const { amount } = req.body;
+
+    const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+    const task = taskResult.rows[0];
+    
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.poster_id !== user.id) {
+      return res.status(403).json({ error: 'Only poster can leave tip' });
+    }
+    if (task.status !== 'completed') {
+      return res.status(400).json({ error: 'Can only tip after task is completed' });
+    }
+    if (task.tip_amount) {
+      return res.status(400).json({ error: 'Tip already given for this task' });
+    }
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid tip amount required' });
+    }
+
+    const stripe = await getStripeClient();
+    const amountCents = Math.round(parseFloat(amount) * 100);
+    
+    // No platform fee on tips (all goes to helper)
+    const helperResult = await pool.query('SELECT stripe_account_id FROM users WHERE id = $1', [task.helper_id]);
+    const helperStripeAccountId = helperResult.rows[0]?.stripe_account_id;
+
+    const sessionParams = {
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: `Tip for: ${task.title}`,
+            description: 'Thank you tip for a job well done!',
+          },
+          unit_amount: amountCents,
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${process.env.APP_URL || 'http://localhost:8081'}/task/${task.id}?tip_paid=true`,
+      cancel_url: `${process.env.APP_URL || 'http://localhost:8081'}/task/${task.id}?tip_cancelled=true`,
+      metadata: {
+        taskId: task.id,
+        tipAmount: amount,
+        type: 'tip',
+      },
+    };
+
+    if (helperStripeAccountId) {
+      sessionParams.payment_intent_data = {
+        transfer_data: {
+          destination: helperStripeAccountId,
+        },
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    res.json({ checkoutUrl: session.url, sessionId: session.id });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
