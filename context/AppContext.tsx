@@ -16,6 +16,8 @@ interface AppContextType {
   sendOTPCode: (email: string) => Promise<{ success: boolean; message: string }>;
   verifyOTPCode: (email: string, code: string) => Promise<{ success: boolean; user?: User; message: string }>;
   updateUserProfile: (phone?: string, defaultZipCode?: string) => Promise<void>;
+  updateProfilePhoto: (photoUrl: string) => Promise<void>;
+  hasProfilePhoto: () => Promise<boolean>;
   logout: () => Promise<void>;
   setUserMode: (mode: UserMode) => Promise<void>;
   // Task methods
@@ -262,6 +264,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     setUser(newUser);
     await saveUser(newUser);
+  };
+
+  const updateProfilePhoto = async (photoUrl: string) => {
+    if (!user) throw new Error("User not logged in");
+    
+    try {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/users/${user.id}/photo`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ profilePhotoUrl: photoUrl }),
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to update profile photo");
+      }
+      
+      const data = await response.json();
+      const updatedUser = { ...user, profilePhotoUrl: data.profilePhotoUrl };
+      setUser(updatedUser);
+      await saveUser(updatedUser);
+    } catch (error) {
+      console.error("updateProfilePhoto error:", error);
+      throw error;
+    }
+  };
+
+  const hasProfilePhoto = async (): Promise<boolean> => {
+    if (!user) return false;
+    
+    try {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/users/${user.id}/has-photo`);
+      
+      if (!response.ok) {
+        return !!user.profilePhotoUrl;
+      }
+      
+      const data = await response.json();
+      return data.hasPhoto;
+    } catch (error) {
+      console.error("hasProfilePhoto error:", error);
+      return !!user.profilePhotoUrl;
+    }
   };
 
   const logout = async () => {
@@ -556,6 +605,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         sendOTPCode,
         verifyOTPCode,
         updateUserProfile,
+        updateProfilePhoto,
+        hasProfilePhoto,
         logout,
         setUserMode,
         createTask,

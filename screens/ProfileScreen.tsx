@@ -1,6 +1,8 @@
-import React from "react";
-import { View, StyleSheet, Pressable, Alert } from "react-native";
+import React, { useState } from "react";
+import { View, StyleSheet, Pressable, Alert, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { Image } from "expo-image";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ScreenScrollView } from "@/components/ScreenScrollView";
@@ -13,7 +15,8 @@ const AVATAR_COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
-  const { user, tasks, logout, userMode, setUserMode } = useApp();
+  const { user, tasks, logout, userMode, setUserMode, updateProfilePhoto } = useApp();
+  const [isUploading, setIsUploading] = useState(false);
 
   const allTasks = tasks ?? [];
   const isHelperMode = userMode === "helper";
@@ -49,17 +52,113 @@ export default function ProfileScreen() {
     );
   };
 
+  const handlePickPhoto = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert("Not Available", "Photo upload is available in the Expo Go app.");
+      return;
+    }
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "Please allow access to your photos to upload a profile picture.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setIsUploading(true);
+      try {
+        await updateProfilePhoto(result.assets[0].uri);
+        Alert.alert("Success", "Profile photo updated!");
+      } catch (error) {
+        Alert.alert("Error", "Failed to update profile photo. Please try again.");
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert("Not Available", "Camera is available in the Expo Go app.");
+      return;
+    }
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "Please allow camera access to take a profile photo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setIsUploading(true);
+      try {
+        await updateProfilePhoto(result.assets[0].uri);
+        Alert.alert("Success", "Profile photo updated!");
+      } catch (error) {
+        Alert.alert("Error", "Failed to update profile photo. Please try again.");
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const handleChangePhoto = () => {
+    Alert.alert(
+      "Change Profile Photo",
+      "How would you like to add a photo?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Take Photo", onPress: handleTakePhoto },
+        { text: "Choose from Library", onPress: handlePickPhoto },
+      ]
+    );
+  };
+
   const avatarIndex = user?.id ? user.id.charCodeAt(0) : 0;
   const avatarColor = AVATAR_COLORS[avatarIndex % 6];
+  const hasProfilePhoto = !!user?.profilePhotoUrl;
 
   return (
     <ScreenScrollView>
       <View style={styles.header}>
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <ThemedText type="h1" style={styles.avatarText}>
-            {(user?.name ?? "U").charAt(0).toUpperCase()}
+        <Pressable onPress={handleChangePhoto} disabled={isUploading}>
+          <View style={[styles.avatarContainer, { backgroundColor: avatarColor }]}>
+            {hasProfilePhoto ? (
+              <Image
+                source={{ uri: user.profilePhotoUrl }}
+                style={styles.avatarImage}
+                contentFit="cover"
+              />
+            ) : (
+              <ThemedText type="h1" style={styles.avatarText}>
+                {(user?.name ?? "U").charAt(0).toUpperCase()}
+              </ThemedText>
+            )}
+            <View style={[styles.editBadge, { backgroundColor: theme.primary }]}>
+              <Feather name={isUploading ? "loader" : "camera"} size={14} color="#FFFFFF" />
+            </View>
+          </View>
+        </Pressable>
+        
+        {!hasProfilePhoto ? (
+          <ThemedText type="caption" style={[styles.photoHint, { color: theme.textSecondary }]}>
+            Tap to add a profile photo
           </ThemedText>
-        </View>
+        ) : null}
+        
         <ThemedText type="h2" style={styles.name}>
           {user?.name || "User"}
         </ThemedText>
@@ -109,6 +208,27 @@ export default function ProfileScreen() {
             <ThemedText type="body">Switch to {isHelperMode ? "Poster" : "Helper"}</ThemedText>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
               {isHelperMode ? "Post tasks and get help" : "Accept jobs and earn money"}
+            </ThemedText>
+          </View>
+          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+        </Pressable>
+
+        <View style={[styles.separator, { backgroundColor: theme.border }]} />
+
+        <Pressable
+          onPress={handleChangePhoto}
+          style={({ pressed }) => [
+            styles.menuItem,
+            { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
+          ]}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: theme.primary + "20" }]}>
+            <Feather name="camera" size={20} color={theme.primary} />
+          </View>
+          <View style={styles.menuContent}>
+            <ThemedText type="body">Profile Photo</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              {hasProfilePhoto ? "Change your photo" : "Required for posting/accepting jobs"}
             </ThemedText>
           </View>
           <Feather name="chevron-right" size={20} color={theme.textSecondary} />
@@ -205,17 +325,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: Spacing["2xl"],
   },
-  avatar: {
+  avatarContainer: {
     width: 96,
     height: 96,
     borderRadius: 48,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   avatarText: {
     color: "#FFFFFF",
     fontSize: 40,
+  },
+  editBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  photoHint: {
+    marginBottom: Spacing.sm,
   },
   name: {
     marginBottom: Spacing.sm,
