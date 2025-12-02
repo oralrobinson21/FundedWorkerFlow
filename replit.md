@@ -29,6 +29,7 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - **Profile Photo Upload**: Camera and gallery photo picker in ProfileScreen
 - **Extra Work / Counter-Offer Flow**: Helpers can request additional payment when job requires more work than described
 - **Tip Function**: Posters can leave tips after job completion (100% goes to helper, no platform fee)
+- **Task Photos**: Posters can upload 0-10 photos when creating tasks to show helpers the job scope
 
 ### ✅ Backend Implementation
 - Express server on port 5000 with all endpoints
@@ -112,12 +113,12 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 
 ## Database Tables
 - users - User accounts with profile_photo_url
-- tasks - Job postings with tools_required, tools_provided, tip_amount, extra_amount_paid
+- tasks - Job postings with tools_required, tools_provided, tip_amount, extra_amount_paid, photos (TEXT[] for 0-10 task photos)
 - offers - Helper offers with helper_photo_url
 - extra_work_requests - Extra work requests from helpers
 - chat_threads - Chat conversations
 - chat_messages - Individual messages
-- activity_logs - Event tracking (includes extra_work_*, tip_added events)
+- activity_logs - Event tracking (includes extra_work_*, tip_created, tip_paid events)
 
 ## Dev Notes
 - OTP codes logged to console as: `[DEV] OTP Code for {email}: {code}`

@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Pressable, Alert, TextInput, Modal } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, StyleSheet, Pressable, Alert, TextInput, Modal, Image, ScrollView, Dimensions } from "react-native";
 import { Feather } from "@expo/vector-icons";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RouteProp } from "@react-navigation/native";
@@ -39,6 +41,8 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const [customTip, setCustomTip] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  const photoViewerRef = useRef<ScrollView>(null);
 
   const allTasks = tasks ?? [];
   const allThreads = chatThreads ?? [];
@@ -123,6 +127,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           photosRequired: data.photos_required,
           toolsRequired: data.tools_required,
           toolsProvided: data.tools_provided,
+          photos: data.photos || [],
           taskPhotoUrl: data.task_photo_url,
           tipAmount: data.tip_amount ? parseFloat(data.tip_amount) : undefined,
           extraAmountPaid: data.extra_amount_paid ? parseFloat(data.extra_amount_paid) : 0,
@@ -457,6 +462,31 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
             {task.description}
           </ThemedText>
         </View>
+
+        {task.photos && task.photos.length > 0 ? (
+          <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
+            <ThemedText type="h4" style={styles.sectionTitle}>
+              Photos ({task.photos.length})
+            </ThemedText>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              contentContainerStyle={styles.photoGallery}
+            >
+              {task.photos.map((photo, index) => (
+                <Pressable 
+                  key={`task-photo-${index}`} 
+                  onPress={() => setSelectedPhotoIndex(index)}
+                >
+                  <Image 
+                    source={{ uri: photo }} 
+                    style={styles.galleryThumbnail} 
+                  />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
 
         {isPoster && task.fullAddress ? (
           <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
@@ -869,6 +899,61 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={selectedPhotoIndex !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSelectedPhotoIndex(null)}
+        onShow={() => {
+          if (photoViewerRef.current && selectedPhotoIndex !== null) {
+            setTimeout(() => {
+              photoViewerRef.current?.scrollTo({ x: selectedPhotoIndex * SCREEN_WIDTH, animated: false });
+            }, 50);
+          }
+        }}
+      >
+        <View style={styles.photoViewerOverlay}>
+          <Pressable 
+            style={styles.photoViewerCloseButton}
+            onPress={() => setSelectedPhotoIndex(null)}
+          >
+            <Feather name="x" size={28} color="#FFFFFF" />
+          </Pressable>
+          
+          {selectedPhotoIndex !== null && task.photos && task.photos.length > 0 ? (
+            <ScrollView 
+              ref={photoViewerRef}
+              horizontal 
+              pagingEnabled 
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoViewerScroll}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                setSelectedPhotoIndex(index);
+              }}
+            >
+              {task.photos.map((photo, index) => (
+                <View key={`fullscreen-${index}`} style={[styles.fullPhotoContainer, { width: SCREEN_WIDTH }]}>
+                  <Image 
+                    source={{ uri: photo }} 
+                    style={styles.fullPhoto}
+                    resizeMode="contain"
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
+          
+          {task.photos && task.photos.length > 1 ? (
+            <View style={styles.photoCounter}>
+              <ThemedText type="caption" style={{ color: "#FFFFFF" }}>
+                {(selectedPhotoIndex ?? 0) + 1} / {task.photos.length}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -1078,5 +1163,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  photoGallery: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+  galleryThumbnail: {
+    width: 100,
+    height: 100,
+    borderRadius: BorderRadius.md,
+  },
+  photoViewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  photoViewerCloseButton: {
+    position: "absolute",
+    top: 60,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoViewerScroll: {
+    flex: 1,
+  },
+  fullPhotoContainer: {
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullPhoto: {
+    width: "100%",
+    height: "80%",
+  },
+  photoCounter: {
+    position: "absolute",
+    bottom: 60,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
   },
 });

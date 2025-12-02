@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TextInput, Pressable, ScrollView, Modal, Alert, Platform } from "react-native";
+import { View, StyleSheet, TextInput, Pressable, ScrollView, Modal, Alert, Platform, Image, ActionSheetIOS, Dimensions } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   KeyboardAwareScrollView,
 } from "react-native-keyboard-controller";
+import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -14,6 +15,8 @@ import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
 import { NEIGHBORHOODS, CATEGORIES, TaskCategory } from "@/types";
+
+const MAX_PHOTOS = 10;
 
 type CreateTaskScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "CreateTask">;
@@ -40,8 +43,82 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
   const [showNeighborhoodPicker, setShowNeighborhoodPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
 
   const isValid = title.trim() && description.trim() && category && zipCode.trim() && areaDescription.trim() && fullAddress.trim() && parseFloat(price) >= 7;
+
+  const pickImage = async (useCamera: boolean) => {
+    if (photos.length >= MAX_PHOTOS) {
+      Alert.alert("Maximum Photos", `You can only add up to ${MAX_PHOTOS} photos.`);
+      return;
+    }
+
+    try {
+      let result;
+      
+      if (useCamera) {
+        const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!cameraPermission.granted) {
+          Alert.alert("Permission Required", "Camera access is needed to take photos.");
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          quality: 0.8,
+        });
+      } else {
+        const mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!mediaPermission.granted) {
+          Alert.alert("Permission Required", "Photo library access is needed to select photos.");
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsMultipleSelection: true,
+          quality: 0.8,
+          selectionLimit: MAX_PHOTOS - photos.length,
+        });
+      }
+
+      if (!result.canceled && result.assets.length > 0) {
+        const newPhotos = result.assets.map((asset) => asset.uri);
+        setPhotos((prev) => [...prev, ...newPhotos].slice(0, MAX_PHOTOS));
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to select photo. Please try again.");
+    }
+  };
+
+  const showPhotoOptions = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Take Photo", "Choose from Library"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) pickImage(true);
+          else if (buttonIndex === 2) pickImage(false);
+        }
+      );
+    } else {
+      Alert.alert(
+        "Add Photo",
+        "Choose an option",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Take Photo", onPress: () => pickImage(true) },
+          { text: "Choose from Library", onPress: () => pickImage(false) },
+        ]
+      );
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async () => {
     if (!isValid || isSubmitting) return;
@@ -75,6 +152,7 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
         photosRequired,
         toolsRequired,
         toolsProvided,
+        photos,
       });
       navigation.replace("Payment", { task });
     } catch (error) {
@@ -138,6 +216,44 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             textAlignVertical="top"
             maxLength={500}
           />
+        </View>
+
+        <View style={styles.field}>
+          <View style={styles.photoHeader}>
+            <ThemedText type="small" style={styles.label}>
+              Photos (optional)
+            </ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              {photos.length} / {MAX_PHOTOS}
+            </ThemedText>
+          </View>
+          <ThemedText type="caption" style={[styles.hint, { color: theme.textSecondary, marginBottom: Spacing.sm }]}>
+            Add photos to help helpers understand the job
+          </ThemedText>
+          <View style={styles.photoGrid}>
+            {photos.map((photo, index) => (
+              <View key={`photo-${index}`} style={styles.photoContainer}>
+                <Image source={{ uri: photo }} style={styles.photoThumbnail} />
+                <Pressable
+                  onPress={() => removePhoto(index)}
+                  style={[styles.removePhotoButton, { backgroundColor: theme.error }]}
+                >
+                  <Feather name="x" size={14} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            ))}
+            {photos.length < MAX_PHOTOS ? (
+              <Pressable
+                onPress={showPhotoOptions}
+                style={[styles.addPhotoButton, { borderColor: theme.border, backgroundColor: theme.backgroundDefault }]}
+              >
+                <Feather name="camera" size={24} color={theme.textSecondary} />
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  Add
+                </ThemedText>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.field}>
@@ -493,5 +609,46 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+  },
+  photoHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  photoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  photoContainer: {
+    width: 80,
+    height: 80,
+    position: "relative",
+  },
+  photoThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.sm,
+  },
+  removePhotoButton: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addPhotoButton: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
   },
 });
