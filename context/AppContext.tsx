@@ -216,9 +216,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveUser(updatedUser);
   };
 
-  const login = async (name: string, phone?: string, defaultZipCode?: string) => {
+  const login = async (name: string, email: string, phone?: string, defaultZipCode?: string) => {
     const newUser: User = {
       id: generateId(),
+      email,
       name,
       phone,
       defaultZipCode,
@@ -408,7 +409,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: generateId(),
       threadId,
       senderId: user.id,
-      senderName: user.name,
+      senderName: user.name || "User",
       text,
       imageUrl,
       isProof,
