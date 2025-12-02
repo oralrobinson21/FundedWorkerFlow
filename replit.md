@@ -127,6 +127,7 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - **Backend must be started separately**: `cd backend && node server.js`
 - The backend runs on port 5000, which is mapped to external port 8008 in .replit config
 - Profile photos stored as local URIs (works in Expo Go)
+- Task photos: Multi-selection works best on iOS; on Android/web, users can add photos one at a time by tapping "Add" repeatedly
 
 ### Running Locally
 1. Start Expo: `npm run dev` (port 8081)
