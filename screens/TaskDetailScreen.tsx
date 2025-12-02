@@ -38,24 +38,39 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const [tipAmount, setTipAmount] = useState("");
   const [customTip, setCustomTip] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [currentTask, setCurrentTask] = useState<Task | null>(null);
 
   const allTasks = tasks ?? [];
   const allThreads = chatThreads ?? [];
   
-  const task = allTasks.find(t => t.id === initialTask.id) || initialTask;
+  const contextTask = allTasks.find(t => t.id === initialTask.id);
+  const task = currentTask || contextTask || initialTask;
   const isPoster = task.posterId === user?.id;
   const isHelper = task.helperId === user?.id;
   const isMyTask = isPoster || isHelper;
 
   useEffect(() => {
-    if (task.id && (task.status === "accepted" || task.status === "in_progress" || task.status === "completed")) {
+    const isEligibleStatus = ["accepted", "assigned", "in_progress", "completed", "worker_marked_done"].includes(task.status);
+    if (task.id && isEligibleStatus) {
       fetchExtraWorkRequests();
     }
   }, [task.id, task.status]);
 
+  const refreshTaskData = async () => {
+    const updatedTask = await fetchTaskData();
+    if (updatedTask) {
+      setCurrentTask(updatedTask as Task);
+    }
+    await fetchExtraWorkRequests();
+  };
+
   const fetchExtraWorkRequests = async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/tasks/${task.id}/extra-work`);
+      const response = await fetch(`${apiUrl}/api/tasks/${task.id}/extra-work`, {
+        headers: {
+          "x-user-id": user?.id || "",
+        },
+      });
       if (response.ok) {
         const data = await response.json();
         setExtraWorkRequests(data.map((r: any) => ({
@@ -76,6 +91,48 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
     } catch (err) {
       console.error("Failed to fetch extra work requests:", err);
     }
+  };
+
+  const fetchTaskData = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/tasks/${task.id}`, {
+        headers: {
+          "x-user-id": user?.id || "",
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          ...data,
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          zipCode: data.zip_code,
+          areaDescription: data.area_description,
+          fullAddress: data.full_address,
+          price: parseFloat(data.price),
+          status: data.status,
+          posterId: data.poster_id,
+          posterName: data.poster_name,
+          posterEmail: data.poster_email,
+          posterPhotoUrl: data.poster_photo_url,
+          helperId: data.helper_id,
+          helperName: data.helper_name,
+          confirmationCode: data.confirmation_code,
+          photosRequired: data.photos_required,
+          toolsRequired: data.tools_required,
+          toolsProvided: data.tools_provided,
+          taskPhotoUrl: data.task_photo_url,
+          tipAmount: data.tip_amount ? parseFloat(data.tip_amount) : undefined,
+          extraAmountPaid: data.extra_amount_paid ? parseFloat(data.extra_amount_paid) : 0,
+          createdAt: data.created_at,
+        };
+      }
+    } catch (err) {
+      console.error("Failed to fetch task:", err);
+    }
+    return null;
   };
 
   const handleSendOffer = async () => {
@@ -198,8 +255,8 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
       const data = await response.json();
       if (data.checkoutUrl) {
         await WebBrowser.openBrowserAsync(data.checkoutUrl);
+        await refreshTaskData();
       }
-      fetchExtraWorkRequests();
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to accept extra work request.");
     } finally {
@@ -270,6 +327,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
       const data = await response.json();
       if (data.checkoutUrl) {
         await WebBrowser.openBrowserAsync(data.checkoutUrl);
+        await refreshTaskData();
       }
       setShowTipModal(false);
       setTipAmount("");

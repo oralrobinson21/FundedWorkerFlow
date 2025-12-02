@@ -12,6 +12,7 @@ interface AppContextType {
   chatThreads: ChatThread[];
   chatMessages: Record<string, ChatMessage[]>;
   supportTickets: SupportTicket[];
+  apiUrl: string;
   // Auth methods
   sendOTPCode: (email: string) => Promise<{ success: boolean; message: string }>;
   verifyOTPCode: (email: string, code: string) => Promise<{ success: boolean; user?: User; message: string }>;
@@ -602,6 +603,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         chatThreads,
         chatMessages,
         supportTickets,
+        apiUrl: API_BASE_URL,
         sendOTPCode,
         verifyOTPCode,
         updateUserProfile,

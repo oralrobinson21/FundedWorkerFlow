@@ -11,7 +11,7 @@ function getApiBaseUrl(): string {
   if (Platform.OS === "web" && typeof window !== "undefined") {
     if (window.location.hostname.includes("replit")) {
       const hostname = window.location.hostname;
-      const backendHost = hostname.replace(/-\d+-/, "-00-");
+      const backendHost = hostname.replace(/-\d+-/, "-8008-");
       return `https://${backendHost}`;
     }
     return "http://localhost:5000";

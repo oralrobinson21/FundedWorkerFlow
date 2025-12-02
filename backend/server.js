@@ -98,9 +98,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           WHERE id = $3
         `, [tipAmount, paymentIntentId, taskId]);
 
-        await logActivity('tip_added', null, taskId, null, { amount: tipAmount });
+        await logActivity('tip_paid', null, taskId, null, { amount: tipAmount });
 
-        console.log(`Tip of $${tipAmount} added to task ${taskId}`);
+        console.log(`Tip of $${tipAmount} paid for task ${taskId}`);
       }
       // Handle original task payment (helper selection)
       else {
@@ -154,7 +154,12 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 });
 
 // Middleware (AFTER webhook route)
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'x-user-id'],
+}));
 app.use(express.json());
 
 // ⸻ AUTH: SEND OTP ⸻
@@ -1037,6 +1042,8 @@ app.post('/api/tasks/:taskId/tip', async (req, res) => {
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
+
+    await logActivity('tip_created', user.id, taskId, null, { amount, sessionId: session.id });
 
     res.json({ checkoutUrl: session.url, sessionId: session.id });
   } catch (error) {
