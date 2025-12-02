@@ -3,6 +3,10 @@ import { Task } from "@/types";
 export type RootStackParamList = {
   Main: undefined;
   Onboarding: undefined;
+  Login: undefined;
+  Verify: { email: string };
+  Phone: undefined;
+  ModeSelector: undefined;
   CreateTask: undefined;
   TaskDetail: { task: Task };
   Chat: { threadId: string; taskId: string; otherUserName: string };

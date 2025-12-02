@@ -13,25 +13,27 @@ const AVATAR_COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
-  const { user, tasks, logout, isHelperMode, toggleHelperMode } = useApp();
+  const { user, tasks, logout, userMode, setUserMode } = useApp();
 
-  const isWorker = user?.role === "worker";
+  const allTasks = tasks ?? [];
+  const isHelperMode = userMode === "helper";
   
   const completedTasks = isHelperMode
-    ? tasks.filter(task => task.workerId === user?.id && task.status === "completed")
-    : tasks.filter(task => task.customerId === user?.id && task.status === "completed");
+    ? allTasks.filter(task => task.helperId === user?.id && task.status === "completed")
+    : allTasks.filter(task => task.posterId === user?.id && task.status === "completed");
 
   const totalEarnings = isHelperMode
     ? completedTasks.reduce((sum, task) => sum + task.price * (1 - PLATFORM_FEE_PERCENT), 0)
     : completedTasks.reduce((sum, task) => sum + task.price * (1 + PLATFORM_FEE_PERCENT), 0);
 
   const handleSwitchMode = () => {
+    const newMode = isHelperMode ? "poster" : "helper";
     Alert.alert(
       "Switch View",
-      `Switch to ${isHelperMode ? "Customer" : "Helper"} view?`,
+      `Switch to ${isHelperMode ? "Poster" : "Helper"} view?`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Switch", onPress: toggleHelperMode },
+        { text: "Switch", onPress: () => setUserMode(newMode) },
       ]
     );
   };
@@ -47,14 +49,15 @@ export default function ProfileScreen() {
     );
   };
 
-  const avatarColor = user ? AVATAR_COLORS[user.avatarIndex % 6] : AVATAR_COLORS[0];
+  const avatarIndex = user?.id ? user.id.charCodeAt(0) : 0;
+  const avatarColor = AVATAR_COLORS[avatarIndex % 6];
 
   return (
     <ScreenScrollView>
       <View style={styles.header}>
         <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
           <ThemedText type="h1" style={styles.avatarText}>
-            {user?.name.charAt(0).toUpperCase() || "U"}
+            {(user?.name ?? "U").charAt(0).toUpperCase()}
           </ThemedText>
         </View>
         <ThemedText type="h2" style={styles.name}>
@@ -63,7 +66,7 @@ export default function ProfileScreen() {
         <View style={[styles.roleBadge, { backgroundColor: isHelperMode ? theme.secondary : theme.primary }]}>
           <Feather name={isHelperMode ? "tool" : "briefcase"} size={14} color="#FFFFFF" />
           <ThemedText type="caption" style={styles.roleBadgeText}>
-            {isHelperMode ? "Helper" : "Customer"}
+            {isHelperMode ? "Helper" : "Poster"}
           </ThemedText>
         </View>
       </View>
@@ -103,7 +106,7 @@ export default function ProfileScreen() {
             <Feather name="repeat" size={20} color={theme.secondary} />
           </View>
           <View style={styles.menuContent}>
-            <ThemedText type="body">Switch to {isHelperMode ? "Customer" : "Helper"}</ThemedText>
+            <ThemedText type="body">Switch to {isHelperMode ? "Poster" : "Helper"}</ThemedText>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
               {isHelperMode ? "Post tasks and get help" : "Accept jobs and earn money"}
             </ThemedText>

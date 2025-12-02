@@ -3,6 +3,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import MainTabNavigator from "@/navigation/MainTabNavigator";
 import OnboardingScreen from "@/screens/OnboardingScreen";
+import LoginScreen from "@/screens/LoginScreen";
+import VerifyScreen from "@/screens/VerifyScreen";
 import CreateTaskScreen from "@/screens/CreateTaskScreen";
 import TaskDetailScreen from "@/screens/TaskDetailScreen";
 import ChatScreen from "@/screens/ChatScreen";
@@ -88,13 +90,29 @@ export default function RootNavigator() {
           />
         </>
       ) : (
-        <Stack.Screen
-          name="Onboarding"
-          component={OnboardingScreen}
-          options={{
-            animation: "fade",
-          }}
-        />
+        <>
+          <Stack.Screen
+            name="Onboarding"
+            component={OnboardingScreen}
+            options={{
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="Verify"
+            component={VerifyScreen}
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+        </>
       )}
     </Stack.Navigator>
   );

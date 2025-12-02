@@ -10,6 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
+import { UserMode } from "@/types";
 
 type OnboardingScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Onboarding">;
@@ -18,14 +19,11 @@ type OnboardingScreenProps = {
 export default function OnboardingScreen({ navigation }: OnboardingScreenProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { login } = useApp();
+  const { setUserMode } = useApp();
 
-  const handleSelectRole = async (role: "customer" | "worker") => {
-    await login(
-      role === "customer" ? "Customer User" : "Helper User",
-      role === "customer" ? "customer@citytasks.app" : "helper@citytasks.app",
-      role
-    );
+  const handleSelectRole = async (mode: UserMode) => {
+    await setUserMode(mode);
+    navigation.navigate("Login");
   };
 
   return (
@@ -47,7 +45,7 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
 
         <View style={styles.buttonsContainer}>
           <Pressable
-            onPress={() => handleSelectRole("customer")}
+            onPress={() => handleSelectRole("poster")}
             style={({ pressed }) => [
               styles.roleButton,
               { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1 },
@@ -70,7 +68,7 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
           </Pressable>
 
           <Pressable
-            onPress={() => handleSelectRole("worker")}
+            onPress={() => handleSelectRole("helper")}
             style={({ pressed }) => [
               styles.roleButton,
               { backgroundColor: theme.secondary, opacity: pressed ? 0.9 : 1 },
