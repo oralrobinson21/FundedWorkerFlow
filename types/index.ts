@@ -53,6 +53,7 @@ export interface Task {
   photosRequired: boolean;
   toolsRequired: boolean;
   toolsProvided: boolean;
+  photos: string[];
   taskPhotoUrl?: string;
   stripeCheckoutSessionId?: string;
   stripePaymentIntentId?: string;
