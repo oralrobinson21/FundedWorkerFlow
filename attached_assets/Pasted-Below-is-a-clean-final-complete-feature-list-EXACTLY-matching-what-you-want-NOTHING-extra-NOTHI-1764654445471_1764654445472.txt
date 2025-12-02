@@ -1,0 +1,247 @@
+Below is a clean, final, complete feature list EXACTLY matching what you want — NOTHING extra, NOTHING missing.
+This is the blueprint your app needs to be 100% functional for:
+	•	Posting jobs
+	•	Accepting jobs
+	•	Searching jobs
+	•	Filtering jobs
+	•	Canceling jobs
+	•	Messaging
+	•	Tools required
+	•	Tool availability
+	•	Profile photos
+	•	Record logs
+	•	Stripe integration
+	•	Safety
+
+You can copy-paste this directly into your agent or dev.
+
+⸻
+
+✅ FINAL COMPLETE REQUIREMENTS (COPY–PASTE)
+
+This is the full specification for the app:
+
+⸻
+
+🔵 1. Categories (13 total)
+
+Every task MUST be assigned one of the following:
+	1.	Cleaning & Housekeeping
+	2.	Moving & Heavy Lifting
+	3.	Delivery & Pickups
+	4.	Handyman & Repairs
+	5.	Yardwork & Outdoors
+	6.	Errands & Small Tasks
+	7.	Tech Help
+	8.	Pet Care
+	9.	Car Help
+	10.	Home Organizing
+	11.	Babysitting & Senior Help
+	12.	Beauty & Personal Services
+	13.	Other
+
+⸻
+
+🔵 2. Posting Flow (Poster Mode)
+
+When creating a task, the poster MUST fill in:
+	•	Category (dropdown from the 13 above)
+	•	Task title
+	•	Task description
+	•	Zip code
+	•	Area / neighborhood description
+	•	Full address (hidden until acceptance)
+	•	Budget (minimum $7 enforced)
+	•	Tools Required? (switch)
+	•	Tools Provided? (switch)
+	•	Photo upload (optional, but recommended)
+
+The system must:
+	•	Validate the $7 minimum
+	•	Validate all required fields
+	•	Save the task
+	•	Add it to the global task list
+	•	Show the poster their task under “My Posts”
+	•	Allow poster to cancel the task at any time if not accepted
+	•	Once accepted, poster can no longer cancel unless dispute is opened
+
+⸻
+
+🔵 3. Searching & Filtering (Helper Mode)
+
+Helpers MUST be able to filter tasks by:
+	•	All categories (default)
+	•	A single category
+	•	Zip code radius
+	•	Tools required
+	•	Tools provided
+
+Search example filters:
+	•	Show ALL tasks (unfiltered)
+	•	Show only Cleaning & Housekeeping
+	•	Show only Handyman tasks requiring tools
+	•	Show only tasks in 10457 zip
+
+This guarantees scalability even with 100,000+ tasks posted.
+
+⸻
+
+🔵 4. Accepting Tasks (Helper Mode)
+
+When the helper taps a task:
+
+They MUST see:
+	•	Category
+	•	Task title
+	•	Description
+	•	Zip code
+	•	Tools required? (yes/no)
+	•	Tools provided? (yes/no)
+	•	Budget
+	•	Poster’s profile photo
+	•	“About the poster” (name + rating in future)
+
+Helper must submit:
+	•	A short note explaining their experience
+	•	(Optional) expected arrival time
+
+After submitting:
+	•	Poster sees all helper offers
+	•	Poster chooses 1 helper
+	•	System triggers Stripe Checkout (poster pays)
+	•	Stripe webhook creates the chat thread
+	•	Task disappears from public list
+
+⸻
+
+🔵 5. Messaging (after acceptance)
+
+Once a helper is chosen & payment is successful:
+	•	Chat thread is created
+	•	Both sides can send messages
+	•	Both sides can send photos (proof)
+	•	Chat auto-deletes after 3 days
+	•	Task shows “In progress”
+
+Helper sees full address ONLY after acceptance.
+
+⸻
+
+🔵 6. Cancellation Rules
+
+Poster can cancel:
+	•	Before helper is selected (immediate)
+	•	After payment (only if dispute is opened)
+
+Helper can cancel:
+	•	Before arriving
+	•	Poster gets refunded manually (you handle)
+
+Cancel button must exist on:
+	•	Poster: TaskDetailScreen
+	•	Helper: AcceptedTaskDetailScreen
+
+⸻
+
+🔵 7. Profile Photo Requirement
+
+All users must upload a profile photo before:
+	•	Posting a task
+	•	Sending an offer
+	•	Messaging
+	•	Accepting a task
+
+This is required for safety so posters know who is coming to their home.
+
+System must block continuation with:
+
+"Please upload a profile photo to continue."
+
+
+⸻
+
+🔵 8. Logging & Records
+
+You want detailed logs. Best approach:
+
+Store logs in your backend DB + Stripe dashboard.
+
+DB logs should record:
+	•	Task created
+	•	Helper offer submitted
+	•	Poster selection
+	•	Payment initiated
+	•	Payment success
+	•	Chat created
+	•	Task in progress
+	•	Task completed
+	•	Disputes
+	•	Cancellations
+	•	Payout released
+
+Stripe will also keep:
+	•	Payment records
+	•	Payout logs
+	•	Fees
+	•	Platform earnings
+
+This gives you full protection in case of disputes or fraud.
+
+⸻
+
+🔵 9. Stripe Logic
+
+Platform keeps: 15% fee
+
+Helper receives: 85%
+
+Stripe Connect Express flow:
+	1.	User posts a job
+	2.	Helper submits offer
+	3.	Poster selects helper
+	4.	Stripe Checkout opens
+	5.	Payment succeeds
+	6.	Chat opens
+	7.	Helper does work
+	8.	Poster marks complete
+	9.	You manually release payout
+	10.	Logs record everything
+
+⸻
+
+🔵 10. Final System Guarantee
+
+With this setup the app supports:
+
+✔️ Posting tasks
+✔️ Searching with 13 categories
+✔️ Viewing all tasks or filtered tasks
+✔️ Selecting category during creation
+✔️ Tools required / tools available switches
+✔️ Accepting offers
+✔️ Canceling posts
+✔️ Profile photo requirement
+✔️ Chat after acceptance
+✔️ Full record logging
+✔️ Stripe safe payments
+
+This is a complete marketplace system.
+
+⸻
+
+If you want, I can now generate:
+
+👉 A TypeScript model file for all categories
+
+👉 A UI screen layout for filters
+
+👉 The backend database schema
+
+👉 The full AppContext updated to support all fields
+
+Just say:
+“Generate the TypeScript schema”
+or
+“Generate the filter UI”
+or
+“Generate full AppContext with all new fields.”

@@ -34,6 +34,10 @@ localPort = 36721
 externalPort = 8000
 
 [[ports]]
+localPort = 37915
+externalPort = 8080
+
+[[ports]]
 localPort = 40235
 externalPort = 5173
 
@@ -133,4 +137,3 @@ value = "0"
 MIN_JOB_PRICE_USD = "7"
 PLATFORM_FEE_PERCENT = "15"
 API_BASE_URL = "http://localhost:3001"
-EXPO_PUBLIC_API_URL = "https://b3072cff-05d1-4215-a0a7-15b131b8ea4a-00-wd3ym4rbzcjm.kirk.replit.dev"

@@ -23,6 +23,19 @@ const getAuthUser = async (req) => {
   return result.rows[0] || { id: userId };
 };
 
+// Helper: Log activity
+const logActivity = async (eventType, userId, taskId, offerId, details) => {
+  try {
+    await pool.query(`
+      INSERT INTO activity_logs (event_type, user_id, task_id, offer_id, details)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [eventType, userId, taskId, offerId, JSON.stringify(details)]);
+    console.log(`[LOG] ${eventType}:`, { userId, taskId, offerId, ...details });
+  } catch (err) {
+    console.error('Failed to log activity:', err);
+  }
+};
+
 // ⸻ STRIPE WEBHOOK (must be BEFORE express.json) ⸻
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
@@ -258,7 +271,7 @@ app.get('/api/stripe/connect/status', async (req, res) => {
 app.post('/api/tasks', async (req, res) => {
   try {
     const user = await getAuthUser(req);
-    const { title, description, category, zipCode, areaDescription, fullAddress, price, photosRequired } = req.body;
+    const { title, description, category, zipCode, areaDescription, fullAddress, price, photosRequired, toolsRequired, toolsProvided, taskPhotoUrl } = req.body;
 
     const MIN_PRICE = parseFloat(process.env.MIN_JOB_PRICE_USD || '7');
     if (price < MIN_PRICE) {
@@ -270,10 +283,13 @@ app.post('/api/tasks', async (req, res) => {
 
     await pool.query(`
       INSERT INTO tasks (id, title, description, category, zip_code, area_description, full_address, 
-        price, poster_id, poster_name, poster_email, confirmation_code, photos_required)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        price, poster_id, poster_name, poster_email, poster_photo_url, confirmation_code, photos_required, tools_required, tools_provided, task_photo_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     `, [taskId, title, description, category, zipCode, areaDescription, fullAddress, 
-        price, user.id, user.name || 'Anonymous', user.email, confirmationCode, photosRequired || false]);
+        price, user.id, user.name || 'Anonymous', user.email, user.profile_photo_url, confirmationCode, 
+        photosRequired || false, toolsRequired || false, toolsProvided || false, taskPhotoUrl]);
+
+    await logActivity('task_created', user.id, taskId, null, { title, category, price });
 
     const result = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
     res.json(result.rows[0]);
@@ -286,7 +302,7 @@ app.post('/api/tasks', async (req, res) => {
 // ⸻ GET TASKS (for helpers to discover) ⸻
 app.get('/api/tasks', async (req, res) => {
   try {
-    const { status, zipCode, category } = req.query;
+    const { status, zipCode, category, toolsRequired, toolsProvided } = req.query;
     
     let query = 'SELECT * FROM tasks WHERE 1=1';
     const params = [];
@@ -300,9 +316,19 @@ app.get('/api/tasks', async (req, res) => {
       query += ` AND zip_code = $${paramIndex++}`;
       params.push(zipCode);
     }
-    if (category) {
+    if (category && category !== 'All') {
       query += ` AND category = $${paramIndex++}`;
       params.push(category);
+    }
+    if (toolsRequired === 'true') {
+      query += ` AND tools_required = TRUE`;
+    } else if (toolsRequired === 'false') {
+      query += ` AND tools_required = FALSE`;
+    }
+    if (toolsProvided === 'true') {
+      query += ` AND tools_provided = TRUE`;
+    } else if (toolsProvided === 'false') {
+      query += ` AND tools_provided = FALSE`;
     }
 
     query += ' ORDER BY created_at DESC';
@@ -373,9 +399,11 @@ app.post('/api/tasks/:taskId/offers', async (req, res) => {
 
     const offerId = generateId();
     await pool.query(`
-      INSERT INTO offers (id, task_id, helper_id, helper_name, note, proposed_price)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `, [offerId, taskId, user.id, user.name || 'Anonymous', note, proposedPrice]);
+      INSERT INTO offers (id, task_id, helper_id, helper_name, helper_photo_url, note, proposed_price)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [offerId, taskId, user.id, user.name || 'Anonymous', user.profile_photo_url, note, proposedPrice]);
+
+    await logActivity('offer_submitted', user.id, taskId, offerId, { note, proposedPrice });
 
     const result = await pool.query('SELECT * FROM offers WHERE id = $1', [offerId]);
     res.json(result.rows[0]);
@@ -637,6 +665,78 @@ app.post('/api/tasks/:taskId/dispute', async (req, res) => {
   }
 });
 
+// ⸻ PROFILE PHOTO ⸻
+app.put('/api/users/:userId/photo', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { profilePhotoUrl } = req.body;
+
+    await pool.query('UPDATE users SET profile_photo_url = $1 WHERE id = $2', [profilePhotoUrl, userId]);
+
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = result.rows[0];
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      defaultZipCode: user.default_zip_code,
+      profilePhotoUrl: user.profile_photo_url,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ CHECK PROFILE PHOTO ⸻
+app.get('/api/users/:userId/has-photo', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await pool.query('SELECT profile_photo_url FROM users WHERE id = $1', [userId]);
+    
+    if (result.rows.length === 0) {
+      return res.json({ hasPhoto: false });
+    }
+    
+    const hasPhoto = !!result.rows[0].profile_photo_url;
+    res.json({ hasPhoto });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ GET ACTIVITY LOGS ⸻
+app.get('/api/activity-logs', async (req, res) => {
+  try {
+    const { taskId, userId, limit = 50 } = req.query;
+    
+    let query = 'SELECT * FROM activity_logs WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (taskId) {
+      query += ` AND task_id = $${paramIndex++}`;
+      params.push(taskId);
+    }
+    if (userId) {
+      query += ` AND user_id = $${paramIndex++}`;
+      params.push(userId);
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${paramIndex}`;
+    params.push(parseInt(limit));
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ⸻ STRIPE PUBLISHABLE KEY ⸻
 app.get('/api/stripe/config', async (req, res) => {
   try {
@@ -651,6 +751,10 @@ app.get('/api/stripe/config', async (req, res) => {
 // ⸻ HEALTH CHECK ⸻
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Initialize and start server

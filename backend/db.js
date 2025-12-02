@@ -16,6 +16,7 @@ async function initDatabase() {
         default_zip_code TEXT,
         stripe_account_id TEXT,
         stripe_customer_id TEXT,
+        profile_photo_url TEXT,
         created_at TIMESTAMP DEFAULT NOW()
       );
 
@@ -41,10 +42,14 @@ async function initDatabase() {
         poster_id TEXT REFERENCES users(id),
         poster_name TEXT,
         poster_email TEXT,
+        poster_photo_url TEXT,
         helper_id TEXT REFERENCES users(id),
         helper_name TEXT,
         confirmation_code TEXT,
         photos_required BOOLEAN DEFAULT FALSE,
+        tools_required BOOLEAN DEFAULT FALSE,
+        tools_provided BOOLEAN DEFAULT FALSE,
+        task_photo_url TEXT,
         stripe_checkout_session_id TEXT,
         stripe_payment_intent_id TEXT,
         stripe_charge_id TEXT,
@@ -63,6 +68,7 @@ async function initDatabase() {
         task_id TEXT REFERENCES tasks(id),
         helper_id TEXT REFERENCES users(id),
         helper_name TEXT,
+        helper_photo_url TEXT,
         note TEXT,
         proposed_price DECIMAL(10,2),
         status TEXT DEFAULT 'pending',
@@ -89,6 +95,27 @@ async function initDatabase() {
         is_proof BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS activity_logs (
+        id SERIAL PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        user_id TEXT,
+        task_id TEXT,
+        offer_id TEXT,
+        details JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Add columns if they don't exist (for migrations)
+      DO $$ 
+      BEGIN
+        BEGIN ALTER TABLE users ADD COLUMN profile_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN tools_required BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN tools_provided BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN task_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN poster_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE offers ADD COLUMN helper_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+      END $$;
     `);
     console.log('Database tables initialized');
   } finally {

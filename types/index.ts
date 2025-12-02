@@ -1,6 +1,19 @@
 export type UserMode = "poster" | "helper";
 export type TaskStatus = "requested" | "unpaid" | "paid_waiting" | "assigned" | "in_progress" | "worker_marked_done" | "completed" | "canceled" | "disputed";
-export type TaskCategory = "Cleaning" | "Moving" | "Handyman" | "Groceries" | "Other";
+export type TaskCategory = 
+  | "Cleaning & Housekeeping"
+  | "Moving & Heavy Lifting"
+  | "Delivery & Pickups"
+  | "Handyman & Repairs"
+  | "Yardwork & Outdoors"
+  | "Errands & Small Tasks"
+  | "Tech Help"
+  | "Pet Care"
+  | "Car Help"
+  | "Home Organizing"
+  | "Babysitting & Senior Help"
+  | "Beauty & Personal Services"
+  | "Other";
 export type SupportTicketStatus = "open" | "in_review" | "closed";
 export type JobOfferStatus = "pending" | "declined" | "accepted";
 export type PaymentStatus = "pending" | "paid" | "refunded" | "failed";
@@ -14,6 +27,7 @@ export interface User {
   accountNumber: string;
   stripeAccountId?: string;
   payoutsEnabled?: boolean;
+  profilePhotoUrl?: string;
   createdAt: string;
 }
 
@@ -30,12 +44,15 @@ export interface Task {
   posterId: string;
   posterName: string;
   posterEmail?: string;
+  posterPhotoUrl?: string;
   helperId?: string;
   helperName?: string;
   helperEmail?: string;
   confirmationCode: string;
   photosRequired: boolean;
-  // Stripe/payment fields
+  toolsRequired: boolean;
+  toolsProvided: boolean;
+  taskPhotoUrl?: string;
   stripeCheckoutSessionId?: string;
   stripePaymentIntentId?: string;
   stripeChargeId?: string;
@@ -114,8 +131,22 @@ export interface Message {
   isProof?: boolean;
 }
 
-export const CATEGORIES: TaskCategory[] = ["Cleaning", "Moving", "Handyman", "Groceries", "Other"];
-export const PLATFORM_FEE_PERCENT = 0.10;
+export const CATEGORIES: TaskCategory[] = [
+  "Cleaning & Housekeeping",
+  "Moving & Heavy Lifting",
+  "Delivery & Pickups",
+  "Handyman & Repairs",
+  "Yardwork & Outdoors",
+  "Errands & Small Tasks",
+  "Tech Help",
+  "Pet Care",
+  "Car Help",
+  "Home Organizing",
+  "Babysitting & Senior Help",
+  "Beauty & Personal Services",
+  "Other",
+];
+export const PLATFORM_FEE_PERCENT = 0.15;
 
 export const NEIGHBORHOODS = [
   "Bronx - 170th & Grand Concourse",
