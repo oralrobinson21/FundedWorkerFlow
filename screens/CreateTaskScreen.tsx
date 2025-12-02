@@ -35,6 +35,8 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
   const [fullAddress, setFullAddress] = useState("");
   const [price, setPrice] = useState("20");
   const [photosRequired, setPhotosRequired] = useState(false);
+  const [toolsRequired, setToolsRequired] = useState(false);
+  const [toolsProvided, setToolsProvided] = useState(false);
   const [showNeighborhoodPicker, setShowNeighborhoodPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,6 +57,8 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
         fullAddress: fullAddress.trim(),
         price: parseFloat(price),
         photosRequired,
+        toolsRequired,
+        toolsProvided,
       });
       navigation.replace("Payment", { task });
     } catch (error) {
@@ -179,7 +183,7 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             />
           </View>
           <ThemedText type="caption" style={[styles.hint, { color: theme.textSecondary }]}>
-            Minimum $5. You'll pay a small 8% service fee.
+            Minimum $7. A 15% platform fee will be applied.
           </ThemedText>
         </View>
 
@@ -207,6 +211,30 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             keyboardType="number-pad"
             maxLength={10}
           />
+        </View>
+
+        <View style={styles.field}>
+          <Pressable
+            onPress={() => setToolsRequired(!toolsRequired)}
+            style={styles.checkboxRow}
+          >
+            <View style={[styles.checkbox, { borderColor: theme.border, backgroundColor: toolsRequired ? theme.primary : 'transparent' }]}>
+              {toolsRequired ? <Feather name="check" size={14} color="#FFFFFF" /> : null}
+            </View>
+            <ThemedText type="body">Tools required for this job</ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={styles.field}>
+          <Pressable
+            onPress={() => setToolsProvided(!toolsProvided)}
+            style={styles.checkboxRow}
+          >
+            <View style={[styles.checkbox, { borderColor: theme.border, backgroundColor: toolsProvided ? theme.primary : 'transparent' }]}>
+              {toolsProvided ? <Feather name="check" size={14} color="#FFFFFF" /> : null}
+            </View>
+            <ThemedText type="body">I will provide tools</ThemedText>
+          </Pressable>
         </View>
 
         <View style={styles.field}>
