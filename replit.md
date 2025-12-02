@@ -1,7 +1,7 @@
 # CityTasks MVP - Project Status
 
 ## Overview
-Marketplace app where customers post job requests for free, helpers send offers with notes, customers choose a helper and pay via Stripe Checkout, then chat and complete the job with photo proof.
+Marketplace app where posters post job requests for free, helpers send offers with notes, posters choose a helper and pay via Stripe Checkout, then chat and complete the job with photo proof.
 
 ## Architecture
 - **Frontend**: Expo/React Native mobile app (App directory)
@@ -12,11 +12,12 @@ Marketplace app where customers post job requests for free, helpers send offers 
 ## Current Status
 
 ### ✅ Completed
-- Email + OTP authentication system
-- User mode selection (poster/helper)
-- Type definitions with Stripe fields
-- AppContext with all methods
-- Screens: LoginScreen, VerifyScreen, PhoneScreen, ModeSelectorScreen, CategoryScreen, CreateTaskScreen, JobListScreen, JobDetailScreen
+- Email + OTP authentication system with LoginScreen and VerifyScreen
+- User mode selection (poster/helper) with OnboardingScreen
+- Standardized terminology: poster/helper throughout (not customer/worker)
+- Type definitions with Stripe fields and proper TaskStatus enum
+- AppContext with all methods including userMode, setUserMode, sendOTPCode, verifyOTPCode
+- Screens: LoginScreen, VerifyScreen, OnboardingScreen, CategoryScreen, CreateTaskScreen, JobListScreen, TaskDetailScreen, ProfileScreen, MessagesScreen
 
 ### ✅ Backend Implementation
 - Express server with all endpoints
@@ -34,6 +35,7 @@ Marketplace app where customers post job requests for free, helpers send offers 
 2. Add Stripe test keys to environment
 3. Build chat UI and photo upload screens
 4. Test full payment flow end-to-end
+5. Expand TaskDetail status badge mappings for all TaskStatus values
 
 ## Payment Flow
 1. Poster creates job (≥$7) → status="requested"
