@@ -121,6 +121,22 @@ async function initDatabase() {
         paid_at TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS disputes (
+        id TEXT PRIMARY KEY,
+        task_id TEXT REFERENCES tasks(id),
+        initiator_id TEXT REFERENCES users(id),
+        initiator_role TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        poster_photo_urls TEXT[] DEFAULT '{}',
+        helper_photo_urls TEXT[] DEFAULT '{}',
+        status TEXT DEFAULT 'pending',
+        resolution TEXT,
+        amount_released DECIMAL(10,2),
+        amount_refunded DECIMAL(10,2),
+        created_at TIMESTAMP DEFAULT NOW(),
+        resolved_at TIMESTAMP
+      );
+
       -- Add columns if they don't exist (for migrations)
       DO $$ 
       BEGIN
@@ -135,6 +151,9 @@ async function initDatabase() {
         BEGIN ALTER TABLE tasks ADD COLUMN tip_created_at TIMESTAMP; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN extra_amount_paid DECIMAL(10,2) DEFAULT 0; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN photos TEXT[] DEFAULT '{}'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN dispute_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN disputed_at TIMESTAMP; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN disputed_by TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
       END $$;
     `);
     console.log('Database tables initialized');

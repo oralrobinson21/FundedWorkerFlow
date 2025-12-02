@@ -133,7 +133,7 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
           { text: "Cancel", style: "cancel" },
           { 
             text: "Add Photo", 
-            onPress: () => navigation.navigate("MainTabs", { screen: "Profile" } as any) 
+            onPress: () => navigation.goBack()
           },
         ]
       );

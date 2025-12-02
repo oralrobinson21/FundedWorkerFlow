@@ -15,6 +15,7 @@ export type TaskCategory =
   | "Beauty & Personal Services"
   | "Other";
 export type SupportTicketStatus = "open" | "in_review" | "closed";
+export type DisputeStatus = "pending" | "in_review" | "resolved_helper" | "resolved_poster" | "resolved_split";
 export type JobOfferStatus = "pending" | "declined" | "accepted";
 export type PaymentStatus = "pending" | "paid" | "refunded" | "failed";
 export type ExtraWorkStatus = "pending" | "accepted" | "rejected" | "paid";
@@ -70,6 +71,9 @@ export interface Task {
   completedAt?: string;
   canceledAt?: string;
   canceledBy?: "poster" | "helper";
+  disputeId?: string;
+  disputedAt?: string;
+  disputedBy?: "poster" | "helper";
 }
 
 export interface JobOffer {
@@ -128,6 +132,22 @@ export interface SupportTicket {
   status: SupportTicketStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Dispute {
+  id: string;
+  taskId: string;
+  initiatorId: string;
+  initiatorRole: "poster" | "helper";
+  reason: string;
+  posterPhotoUrls: string[];
+  helperPhotoUrls: string[];
+  status: DisputeStatus;
+  resolution?: string;
+  amountReleased?: number;
+  amountRefunded?: number;
+  createdAt: string;
+  resolvedAt?: string;
 }
 
 export interface Conversation {

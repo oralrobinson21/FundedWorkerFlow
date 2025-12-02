@@ -707,19 +707,123 @@ app.post('/api/tasks/:taskId/cancel', async (req, res) => {
 // ⸻ 9. DISPUTE TASK ⸻
 app.post('/api/tasks/:taskId/dispute', async (req, res) => {
   try {
+    const user = await getAuthUser(req);
     const { taskId } = req.params;
+    const { reason, photoUrls } = req.body;
 
     const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
     const task = taskResult.rows[0];
     
     if (!task) return res.status(404).json({ error: 'Task not found' });
-    if (task.status !== 'completed') {
-      return res.status(400).json({ error: 'Only completed tasks can be disputed' });
+    
+    // Determine role
+    let initiatorRole;
+    if (user.id === task.poster_id) initiatorRole = 'poster';
+    else if (user.id === task.helper_id) initiatorRole = 'helper';
+    else return res.status(403).json({ error: 'Not authorized' });
+    
+    // Can only dispute accepted/in_progress tasks (before completion) or worker_marked_done
+    if (!['accepted', 'in_progress', 'worker_marked_done'].includes(task.status)) {
+      return res.status(400).json({ error: 'Task cannot be disputed at this status' });
     }
 
-    await pool.query('UPDATE tasks SET status = $1 WHERE id = $2', ['disputed', taskId]);
+    // Create dispute record
+    const disputeId = generateId();
+    const posterPhotos = initiatorRole === 'poster' ? (photoUrls || []) : [];
+    const helperPhotos = initiatorRole === 'helper' ? (photoUrls || []) : [];
+    
+    await pool.query(`
+      INSERT INTO disputes (id, task_id, initiator_id, initiator_role, reason, poster_photo_urls, helper_photo_urls, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+    `, [disputeId, taskId, user.id, initiatorRole, reason || 'Dispute filed', posterPhotos, helperPhotos]);
+
+    // Update task status
+    await pool.query(`
+      UPDATE tasks SET status = 'disputed', disputed_at = NOW(), disputed_by = $1, dispute_id = $2 
+      WHERE id = $3
+    `, [initiatorRole, disputeId, taskId]);
+    
+    // Log the activity
+    await pool.query(`
+      INSERT INTO activity_logs (event_type, user_id, task_id, details)
+      VALUES ($1, $2, $3, $4)
+    `, ['dispute_created', user.id, taskId, JSON.stringify({ 
+      disputeId, 
+      initiatorRole, 
+      reason: reason || 'Dispute filed',
+      photoCount: (photoUrls || []).length
+    })]);
     
     const result = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+    res.json({ task: result.rows[0], disputeId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ 9b. GET DISPUTE ⸻
+app.get('/api/disputes/:disputeId', async (req, res) => {
+  try {
+    const { disputeId } = req.params;
+    const result = await pool.query('SELECT * FROM disputes WHERE id = $1', [disputeId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Dispute not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ 9c. ADD DISPUTE EVIDENCE ⸻
+app.post('/api/disputes/:disputeId/evidence', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+    const { disputeId } = req.params;
+    const { photoUrls } = req.body;
+
+    const disputeResult = await pool.query('SELECT * FROM disputes WHERE id = $1', [disputeId]);
+    const dispute = disputeResult.rows[0];
+    
+    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+
+    const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [dispute.task_id]);
+    const task = taskResult.rows[0];
+    
+    // Determine role
+    let role;
+    if (user.id === task.poster_id) role = 'poster';
+    else if (user.id === task.helper_id) role = 'helper';
+    else return res.status(403).json({ error: 'Not authorized' });
+    
+    // Add photos to the appropriate array
+    if (role === 'poster') {
+      const existingPhotos = dispute.poster_photo_urls || [];
+      await pool.query(`
+        UPDATE disputes SET poster_photo_urls = $1 WHERE id = $2
+      `, [[...existingPhotos, ...(photoUrls || [])], disputeId]);
+    } else {
+      const existingPhotos = dispute.helper_photo_urls || [];
+      await pool.query(`
+        UPDATE disputes SET helper_photo_urls = $1 WHERE id = $2
+      `, [[...existingPhotos, ...(photoUrls || [])], disputeId]);
+    }
+    
+    // Log the activity
+    await pool.query(`
+      INSERT INTO activity_logs (event_type, user_id, task_id, details)
+      VALUES ($1, $2, $3, $4)
+    `, ['dispute_evidence_added', user.id, dispute.task_id, JSON.stringify({ 
+      disputeId, 
+      role,
+      photoCount: (photoUrls || []).length
+    })]);
+    
+    const result = await pool.query('SELECT * FROM disputes WHERE id = $1', [disputeId]);
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);

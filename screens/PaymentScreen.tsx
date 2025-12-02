@@ -10,6 +10,7 @@ import {
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { CheckoutExplanation } from "@/components/InfoBanner";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -25,7 +26,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   const { task } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { payTask } = useApp();
+  const { syncWithSupabase } = useApp();
 
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
@@ -61,7 +62,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     try {
-      await payTask(task.id);
+      await syncWithSupabase();
       Alert.alert(
         "Payment Successful",
         "Your task has been posted! Helpers can now see and accept your job.",
@@ -118,7 +119,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
             {task.title}
           </ThemedText>
           <ThemedText type="caption" style={[styles.summaryMeta, { color: theme.textSecondary }]}>
-            {task.neighborhood}
+            {task.areaDescription || task.zipCode}
           </ThemedText>
           
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -128,7 +129,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
             <ThemedText type="body">${task.price.toFixed(2)}</ThemedText>
           </View>
           <View style={styles.summaryRow}>
-            <ThemedText type="body" style={{ color: theme.textSecondary }}>Service Fee (8%)</ThemedText>
+            <ThemedText type="body" style={{ color: theme.textSecondary }}>Service Fee ({PLATFORM_FEE_PERCENT * 100}%)</ThemedText>
             <ThemedText type="body">${fee.toFixed(2)}</ThemedText>
           </View>
           
@@ -139,6 +140,8 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
             <ThemedText type="h3" style={{ color: theme.primary }}>${total.toFixed(2)}</ThemedText>
           </View>
         </View>
+
+        <CheckoutExplanation />
 
         <View style={styles.cardSection}>
           <ThemedText type="h4" style={styles.sectionTitle}>Card Details</ThemedText>
