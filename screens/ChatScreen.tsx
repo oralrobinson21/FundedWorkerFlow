@@ -24,17 +24,13 @@ function formatTime(timestamp: string): string {
 }
 
 export default function ChatScreen({ navigation, route }: ChatScreenProps) {
-  const { taskId, otherUserName } = route.params;
+  const { threadId, taskId, otherUserName } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, chatThreads, chatMessages, sendChatMessage } = useApp();
+  const { user, chatMessages, sendChatMessage } = useApp();
 
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
-
-  // Find the thread for this task
-  const thread = chatThreads.find(t => t.taskId === taskId);
-  const threadId = thread?.id || "";
   
   // Get messages for this thread
   const messages = threadId ? (chatMessages[threadId] || []) : [];

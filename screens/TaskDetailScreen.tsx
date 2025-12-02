@@ -26,12 +26,12 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const { task: initialTask } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, tasks, acceptTask, completeTask } = useApp();
+  const { user, userMode, tasks, chatThreads, completeTask } = useApp();
 
   const task = tasks.find(t => t.id === initialTask.id) || initialTask;
-  const isCustomer = user?.role === "customer";
-  const isWorker = user?.role === "worker";
-  const isMyTask = task.customerId === user?.id || task.workerId === user?.id;
+  const isPoster = task.posterId === user?.id;
+  const isHelper = task.helperId === user?.id;
+  const isMyTask = isPoster || isHelper;
 
   const handleAcceptJob = () => {
     Alert.alert(
@@ -59,10 +59,13 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   };
 
   const handleMessage = () => {
-    const otherUserName = isCustomer ? task.workerName : task.customerName;
-    if (otherUserName) {
-      navigation.navigate("Chat", { taskId: task.id, otherUserName });
+    const thread = chatThreads.find(t => t.taskId === task.id);
+    if (!thread) {
+      Alert.alert("No Chat Available", "A chat thread will be created once a helper is chosen and payment is complete.");
+      return;
     }
+    const otherUserName = isPoster ? (task.helperName || "Helper") : (task.posterName || "Poster");
+    navigation.navigate("Chat", { threadId: thread.id, taskId: task.id, otherUserName });
   };
 
   const handleGoToPayment = () => {

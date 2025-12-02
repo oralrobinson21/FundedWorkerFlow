@@ -92,7 +92,7 @@ export default function MessagesScreen({ navigation }: MessagesScreenProps) {
 
   const renderItem = ({ item }: { item: Conversation }) => (
     <Pressable
-      onPress={() => navigation.navigate("Chat", { taskId: item.taskId, otherUserName: item.otherUserName })}
+      onPress={() => navigation.navigate("Chat", { threadId: item.threadId, taskId: item.taskId, otherUserName: item.otherUserName })}
       style={({ pressed }) => [
         styles.conversationItem,
         { 

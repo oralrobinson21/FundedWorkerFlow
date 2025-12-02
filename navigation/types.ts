@@ -5,7 +5,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   CreateTask: undefined;
   TaskDetail: { task: Task };
-  Chat: { taskId: string; otherUserName: string };
+  Chat: { threadId: string; taskId: string; otherUserName: string };
   Payment: { task: Task };
   CompletionPhoto: { task: Task };
   Approval: { task: Task };
@@ -26,7 +26,7 @@ export type HomeStackParamList = {
 
 export type MessagesStackParamList = {
   Messages: undefined;
-  Chat: { taskId: string; otherUserName: string };
+  Chat: { threadId: string; taskId: string; otherUserName: string };
 };
 
 export type ActivityStackParamList = {
