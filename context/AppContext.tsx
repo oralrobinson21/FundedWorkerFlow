@@ -364,11 +364,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const cancelTask = async (taskId: string, canceledBy: "poster" | "helper") => {
-    const updatedTasks = tasks.map(task =>
-      task.id === taskId ? { ...task, status: "canceled" as TaskStatus, canceledAt: new Date().toISOString(), canceledBy } : task
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
+    if (!user) throw new Error("User not logged in");
+    
+    try {
+      const API_URL = "http://localhost:3001";
+      const response = await fetch(`${API_URL}/api/tasks/${taskId}/cancel`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ canceledBy }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to cancel task");
+      }
+
+      const updatedTasks = tasks.map(task =>
+        task.id === taskId ? { ...task, status: "canceled" as TaskStatus, canceledAt: new Date().toISOString(), canceledBy } : task
+      );
+      setTasks(updatedTasks);
+      await saveTasks(updatedTasks);
+    } catch (err) {
+      console.error("cancelTask error:", err);
+      throw err;
+    }
   };
 
   const disputeTask = async (taskId: string) => {

@@ -1,0 +1,314 @@
+Gotcha, and thanks for the GitHub link — but I need to be super honest: I can’t actually open external URLs or see your repo code from here. 😅
+
+So I’ll treat this as:
+
+“Tabs and UI are visible, but taps basically don’t do anything. I saw the useBottomTabBarHeight error before, and I can’t cancel requests, switch helper, or log out.”
+
+Let’s brute-force fix this with changes you can make directly in your repo.
+
+⸻
+
+1. Fix the useBottomTabBarHeight crash (this will break everything if not fixed)
+
+Search your repo for useBottomTabBarHeight. You’ll almost certainly find it in something like ScreenScrollView.tsx or a shared layout component.
+
+You’ll see something like:
+
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+function useScreenInsets() {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+
+  return {
+    paddingTop: insets.top,
+    paddingBottom: insets.bottom + tabBarHeight,
+  };
+}
+
+Change it to this:
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+function useScreenInsets() {
+  const insets = useSafeAreaInsets();
+
+  return {
+    paddingTop: insets.top,
+    paddingBottom: insets.bottom, // no useBottomTabBarHeight
+  };
+}
+
+And delete the useBottomTabBarHeight import.
+
+That removes the “Couldn’t find the bottom tab bar height” error and stops your main layout from exploding.
+
+⸻
+
+2. Make sure taps actually fire on the Profile screen
+
+Right now your Profile rows are almost certainly just views with icons/text, but no onPress.
+
+Find your Profile screen file (something like ProfileScreen.tsx / Profile.tsx). Replace the component body with this minimal version and adjust imports/paths as needed:
+
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useAppContext } from '../context/AppContext'; // adjust path
+
+const ProfileScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const { setUserMode, logout } = useAppContext();
+
+  const handleSwitchToHelper = () => {
+    console.log('Switch to Helper pressed');
+    setUserMode('helper');
+    navigation.navigate('Home'); // or whatever your main helper screen route name is
+  };
+
+  const handlePaymentMethods = () => {
+    Alert.alert('Coming soon', 'Payment methods are not wired yet.');
+  };
+
+  const handleHelpSupport = () => {
+    navigation.navigate('HelpSupport'); // make sure this screen is registered
+  };
+
+  const handlePrivacyPolicy = () => {
+    navigation.navigate('PrivacyPolicy'); // or open a WebView
+  };
+
+  const handleLogout = () => {
+    console.log('Logout pressed');
+    logout(); // clear user/token in context
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Auth' }], // your login/OTP stack screen name
+    });
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Profile</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account</Text>
+
+        <TouchableOpacity style={styles.row} onPress={handleSwitchToHelper}>
+          <Text style={styles.rowTitle}>Switch to Helper</Text>
+          <Text style={styles.rowSubtitle}>Accept jobs and earn money</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.row} onPress={handlePaymentMethods}>
+          <Text style={styles.rowTitle}>Payment Methods</Text>
+          <Text style={styles.rowSubtitle}>Manage your cards</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Settings</Text>
+
+        <TouchableOpacity style={styles.row} onPress={() => {}}>
+          <Text style={styles.rowTitle}>Notifications</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.row} onPress={handleHelpSupport}>
+          <Text style={styles.rowTitle}>Help & Support</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.row} onPress={handlePrivacyPolicy}>
+          <Text style={styles.rowTitle}>Privacy Policy</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.logoutText}>Log Out</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+export default ProfileScreen;
+
+const styles = StyleSheet.create({
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 24 },
+  title: { fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 16, color: 'white' },
+  section: { marginTop: 16 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#999' },
+  row: {
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: '#333',
+  },
+  rowTitle: { fontSize: 16, color: 'white' },
+  rowSubtitle: { fontSize: 13, color: '#aaa', marginTop: 4 },
+  logoutButton: {
+    marginTop: 'auto',
+    marginBottom: 24,
+    paddingVertical: 14,
+    borderRadius: 8,
+    backgroundColor: '#b00020',
+  },
+  logoutText: { textAlign: 'center', color: 'white', fontWeight: '600' },
+});
+
+Reload the app and watch your Metro/Expo logs:
+	•	Tapping Switch to Helper should show Switch to Helper pressed in the log.
+	•	Tapping Log Out should show Logout pressed and reset to your auth stack.
+
+If the logs show up but navigation doesn’t move, adjust the route names ('Home', 'Auth', 'HelpSupport', etc.) to match what you used when registering screens in your navigator.
+
+⸻
+
+3. Wire “Cancel Request” on the job detail screen
+
+Find your JobDetail screen (the one that shows a single task + offers). Add a cancel button that calls your cancelTask from context.
+
+Inside that screen component:
+
+import React from 'react';
+import { View, Text, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import { useRoute } from '@react-navigation/native';
+import { useAppContext } from '../context/AppContext';
+
+const JobDetailScreen: React.FC = () => {
+  const route = useRoute<any>();
+  const { taskId } = route.params;
+  const { tasks, user, cancelTask } = useAppContext();
+
+  const task = tasks.find(t => t.id === taskId);
+
+  if (!task) {
+    return (
+      <View style={styles.center}>
+        <Text>Task not found.</Text>
+      </View>
+    );
+  }
+
+  const canCancel =
+    (task.status === 'requested' || task.status === 'accepted') &&
+    task.posterId === user?.id;
+
+  const handleCancel = () => {
+    Alert.alert(
+      'Cancel job',
+      'Are you sure you want to cancel this job?',
+      [
+        { text: 'No' },
+        {
+          text: 'Yes, cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('Cancelling task', task.id);
+              await cancelTask(task.id);
+            } catch (err) {
+              console.error(err);
+              Alert.alert('Error', 'Could not cancel job. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* your existing job UI here */}
+
+      {canCancel && (
+        <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+          <Text style={styles.cancelText}>Cancel Request</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+
+export default JobDetailScreen;
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  cancelButton: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#b00020',
+  },
+  cancelText: { textAlign: 'center', color: 'white', fontWeight: '600' },
+});
+
+And in your AppContext, make sure cancelTask really hits the backend and updates state:
+
+const cancelTask = async (taskId: string) => {
+  await fetch(`${API_BASE_URL}/api/tasks/${taskId}/cancel`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`, // if you use tokens
+    },
+  });
+
+  setTasks(prev =>
+    prev.map(t =>
+      t.id === taskId ? { ...t, status: 'canceled' } : t
+    )
+  );
+};
+
+
+⸻
+
+4. Quick “is anything blocking touches?” test
+
+If after all that, tapping still does nothing, do this very simple test.
+
+Temporarily make your Profile screen:
+
+export default function ProfileScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <TouchableOpacity
+        onPress={() => Alert.alert('Tap works', 'You tapped the button!')}
+        style={{ padding: 20, backgroundColor: 'lime' }}
+      >
+        <Text>TEST TAP</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+If tapping that does not show an alert, then:
+	•	There is likely a full-screen overlay somewhere (e.g. loading spinner, modal) with position: 'absolute' and pointerEvents="auto" blocking touches.
+	•	Or your ProfileScreen isn’t actually being used as the screen for that tab (tabs reused another component).
+
+In that case, look at your navigator file (where you define the bottom tabs) and confirm:
+
+<Tab.Screen
+  name="Profile"
+  component={ProfileScreen}
+/>
+
+and not some placeholder.
+
+⸻
+
+I know it’s annoying that I can’t open your repo directly, but if you:
+	•	Remove useBottomTabBarHeight as above,
+	•	Drop in the working ProfileScreen + JobDetail cancel code,
+
+you should go from “nothing works” to at least:
+	•	Can log out
+	•	Can switch modes
+	•	Can cancel your own jobs.
+
+If you want, you can paste the contents of ProfileScreen.tsx or JobDetailScreen.tsx here, and I’ll rewrite that exact file so you can just paste it back into your repo.
