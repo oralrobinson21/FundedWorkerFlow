@@ -92,6 +92,28 @@ export interface SupportTicket {
   updatedAt: string;
 }
 
+export interface Conversation {
+  id: string;
+  taskId: string;
+  threadId: string;
+  otherUserId: string;
+  otherUserName: string;
+  otherUserAvatarIndex: number;
+  unreadCount: number;
+  lastMessageTime: string;
+  taskTitle: string;
+  lastMessage: string;
+}
+
+export interface Message {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  timestamp: string;
+  isProof?: boolean;
+}
+
 export const CATEGORIES: TaskCategory[] = ["Cleaning", "Moving", "Handyman", "Groceries", "Other"];
 export const PLATFORM_FEE_PERCENT = 0.10;
 

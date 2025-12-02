@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, StyleSheet, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -34,24 +34,61 @@ function formatTime(timestamp: string): string {
 
 export default function MessagesScreen({ navigation }: MessagesScreenProps) {
   const { theme } = useTheme();
-  const { chatThreads, user } = useApp();
+  const { chatThreads, chatMessages, tasks, user } = useApp();
 
-  // Convert chatThreads to conversation format
-  const conversations = (chatThreads ?? []).map(thread => ({
-    id: thread.id,
-    taskId: thread.taskId,
-    otherUserId: thread.posterId === user?.id ? thread.helperId : thread.posterId,
-    otherUserName: thread.posterId === user?.id ? "Helper" : "Poster",
-    otherUserAvatarIndex: 0,
-    unreadCount: 0,
-    lastMessageTime: thread.createdAt,
-    taskTitle: "Ongoing Task",
-    lastMessage: "No messages yet"
-  }));
+  // Build conversations from real data
+  const conversations = useMemo(() => {
+    const allThreads = chatThreads ?? [];
+    const allTasks = tasks ?? [];
+    const allMessages = chatMessages ?? {};
 
-  const userConversations = conversations.filter(conv => 
-    conv.otherUserId !== user?.id
-  );
+    return allThreads
+      .filter(thread => !thread.isClosed)
+      .map(thread => {
+        // Find the associated task
+        const task = allTasks.find(t => t.id === thread.taskId);
+        
+        // Get messages for this thread
+        const threadMessages = allMessages[thread.id] || [];
+        const lastMessage = threadMessages.length > 0 
+          ? threadMessages[threadMessages.length - 1] 
+          : null;
+
+        // Determine who the other user is
+        const isUserPoster = thread.posterId === user?.id;
+        const otherUserId = isUserPoster ? thread.helperId : thread.posterId;
+        
+        // Get other user's name from task if available
+        let otherUserName = "User";
+        if (task) {
+          if (isUserPoster && task.helperName) {
+            otherUserName = task.helperName;
+          } else if (!isUserPoster && task.posterName) {
+            otherUserName = task.posterName;
+          }
+        }
+
+        // Generate avatar index from otherUserId
+        const avatarIndex = otherUserId ? 
+          otherUserId.charCodeAt(0) % AVATAR_COLORS.length : 0;
+
+        const conversation: Conversation = {
+          id: thread.id,
+          taskId: thread.taskId,
+          threadId: thread.id,
+          otherUserId,
+          otherUserName,
+          otherUserAvatarIndex: avatarIndex,
+          unreadCount: 0, // TODO: implement unread tracking
+          lastMessageTime: lastMessage?.createdAt || thread.createdAt,
+          taskTitle: task?.title || "Task",
+          lastMessage: lastMessage?.text || "No messages yet",
+        };
+
+        return conversation;
+      })
+      .sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime());
+  }, [chatThreads, chatMessages, tasks, user]);
 
   const renderItem = ({ item }: { item: Conversation }) => (
     <Pressable
@@ -124,7 +161,7 @@ export default function MessagesScreen({ navigation }: MessagesScreenProps) {
 
   return (
     <ScreenFlatList
-      data={userConversations}
+      data={conversations}
       renderItem={renderItem}
       keyExtractor={(item) => item.id}
       ListEmptyComponent={renderEmpty}

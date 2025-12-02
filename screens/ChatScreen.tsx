@@ -9,13 +9,13 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { RootStackParamList } from "@/navigation/types";
+import { MessagesStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { Message } from "@/types";
+import { ChatMessage } from "@/types";
 
 type ChatScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, "Chat">;
-  route: RouteProp<RootStackParamList, "Chat">;
+  navigation: NativeStackNavigationProp<MessagesStackParamList, "Chat">;
+  route: RouteProp<MessagesStackParamList, "Chat">;
 };
 
 function formatTime(timestamp: string): string {
@@ -27,12 +27,17 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
   const { taskId, otherUserName } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, messages, sendMessage } = useApp();
+  const { user, chatThreads, chatMessages, sendChatMessage } = useApp();
 
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
-  const chatMessages = messages[taskId] || [];
+  // Find the thread for this task
+  const thread = chatThreads.find(t => t.taskId === taskId);
+  const threadId = thread?.id || "";
+  
+  // Get messages for this thread
+  const messages = threadId ? (chatMessages[threadId] || []) : [];
 
   useEffect(() => {
     navigation.setOptions({
@@ -41,27 +46,31 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
   }, [navigation, otherUserName]);
 
   const handleSend = async () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || !threadId) return;
     
     const messageText = inputText.trim();
     setInputText("");
-    await sendMessage(taskId, messageText);
     
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    try {
+      await sendChatMessage(threadId, messageText);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    }
   };
 
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
     const isMyMessage = item.senderId === user?.id;
     const showTimestamp = index === 0 || 
-      new Date(item.timestamp).getTime() - new Date(chatMessages[index - 1].timestamp).getTime() > 300000;
+      new Date(item.createdAt).getTime() - new Date(messages[index - 1].createdAt).getTime() > 300000;
 
     return (
       <View style={styles.messageWrapper}>
         {showTimestamp ? (
           <ThemedText type="caption" style={[styles.timestamp, { color: theme.textSecondary }]}>
-            {formatTime(item.timestamp)}
+            {formatTime(item.createdAt)}
           </ThemedText>
         ) : null}
         <View
@@ -72,15 +81,30 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
               : [styles.otherMessage, { backgroundColor: theme.backgroundDefault }],
           ]}
         >
-          <ThemedText
-            type="body"
-            style={[
-              styles.messageText,
-              { color: isMyMessage ? "#FFFFFF" : theme.text },
-            ]}
-          >
-            {item.content}
-          </ThemedText>
+          {item.imageUrl ? (
+            <ThemedText type="body" style={[styles.messageText, { color: isMyMessage ? "#FFFFFF" : theme.text }]}>
+              [Image attached]
+            </ThemedText>
+          ) : null}
+          {item.text ? (
+            <ThemedText
+              type="body"
+              style={[
+                styles.messageText,
+                { color: isMyMessage ? "#FFFFFF" : theme.text },
+              ]}
+            >
+              {item.text}
+            </ThemedText>
+          ) : null}
+          {item.isProof ? (
+            <View style={styles.proofBadge}>
+              <Feather name="check-circle" size={12} color={isMyMessage ? "#FFFFFF" : theme.primary} />
+              <ThemedText type="caption" style={{ color: isMyMessage ? "#FFFFFF" : theme.primary, marginLeft: 4 }}>
+                Proof of completion
+              </ThemedText>
+            </View>
+          ) : null}
         </View>
       </View>
     );
@@ -119,12 +143,12 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
       >
         <FlatList
           ref={flatListRef}
-          data={chatMessages}
+          data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[
             styles.messagesList,
-            chatMessages.length === 0 && styles.emptyList,
+            messages.length === 0 && styles.emptyList,
           ]}
           ListEmptyComponent={renderEmpty}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
@@ -143,11 +167,11 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
             />
             <Pressable
               onPress={handleSend}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || !threadId}
               style={({ pressed }) => [
                 styles.sendButton,
                 { 
-                  backgroundColor: inputText.trim() ? theme.primary : theme.backgroundSecondary,
+                  backgroundColor: inputText.trim() && threadId ? theme.primary : theme.backgroundSecondary,
                   opacity: pressed && inputText.trim() ? 0.8 : 1,
                 },
               ]}
@@ -155,7 +179,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
               <Feather 
                 name="send" 
                 size={18} 
-                color={inputText.trim() ? "#FFFFFF" : theme.textSecondary} 
+                color={inputText.trim() && threadId ? "#FFFFFF" : theme.textSecondary} 
               />
             </Pressable>
           </View>
@@ -231,6 +255,11 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: Spacing.xs,
   },
   messageText: {},
+  proofBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: Spacing.xs,
+  },
   inputContainer: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.sm,
