@@ -17,6 +17,7 @@ export type TaskCategory =
 export type SupportTicketStatus = "open" | "in_review" | "closed";
 export type JobOfferStatus = "pending" | "declined" | "accepted";
 export type PaymentStatus = "pending" | "paid" | "refunded" | "failed";
+export type ExtraWorkStatus = "pending" | "accepted" | "rejected" | "paid";
 
 export interface User {
   id: string;
@@ -59,6 +60,10 @@ export interface Task {
   platformFeeAmount?: number;
   helperAmount?: number;
   paymentStatus?: PaymentStatus;
+  tipAmount?: number;
+  tipStripePaymentIntentId?: string;
+  tipCreatedAt?: string;
+  extraAmountPaid?: number;
   createdAt: string;
   acceptedAt?: string;
   completedAt?: string;
@@ -75,6 +80,21 @@ export interface JobOffer {
   proposedPrice?: number;
   status: JobOfferStatus;
   createdAt: string;
+}
+
+export interface ExtraWorkRequest {
+  id: string;
+  taskId: string;
+  helperId: string;
+  amount: number;
+  reason: string;
+  photoUrls?: string[];
+  status: ExtraWorkStatus;
+  stripeCheckoutSessionId?: string;
+  stripePaymentIntentId?: string;
+  createdAt: string;
+  respondedAt?: string;
+  paidAt?: string;
 }
 
 export interface ChatThread {

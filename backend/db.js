@@ -106,6 +106,21 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS extra_work_requests (
+        id TEXT PRIMARY KEY,
+        task_id TEXT REFERENCES tasks(id),
+        helper_id TEXT REFERENCES users(id),
+        amount DECIMAL(10,2) NOT NULL,
+        reason TEXT NOT NULL,
+        photo_urls TEXT[],
+        status TEXT DEFAULT 'pending',
+        stripe_checkout_session_id TEXT,
+        stripe_payment_intent_id TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        responded_at TIMESTAMP,
+        paid_at TIMESTAMP
+      );
+
       -- Add columns if they don't exist (for migrations)
       DO $$ 
       BEGIN
@@ -115,6 +130,10 @@ async function initDatabase() {
         BEGIN ALTER TABLE tasks ADD COLUMN task_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN poster_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE offers ADD COLUMN helper_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN tip_amount DECIMAL(10,2); EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN tip_stripe_payment_intent_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN tip_created_at TIMESTAMP; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN extra_amount_paid DECIMAL(10,2) DEFAULT 0; EXCEPTION WHEN duplicate_column THEN NULL; END;
       END $$;
     `);
     console.log('Database tables initialized');

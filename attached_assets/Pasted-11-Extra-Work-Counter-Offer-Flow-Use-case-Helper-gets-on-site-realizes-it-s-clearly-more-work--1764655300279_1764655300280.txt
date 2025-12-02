@@ -1,0 +1,89 @@
+11. Extra Work / Counter-Offer Flow
+
+Use case: Helper gets on site, realizes it’s clearly more work than described.
+
+New rule:
+	•	Once a job is accepted and in in_progress, the helper can send ONE or more “Extra Work Requests” (counter offers).
+
+Extra Work Request includes:
+	•	Extra description (what changed / why more work)
+	•	Extra amount requested (e.g. +$20)
+	•	Optional photos
+
+Poster sees:
+	•	A clear card in the task:
+	•	“Helper requested extra $X for additional work”
+	•	Reason text + photos
+	•	Two buttons:
+	•	Accept extra cost
+	•	Decline
+
+If poster accepts:
+	•	A separate Stripe Checkout session is created for the extra amount only.
+	•	Once extra payment succeeds:
+	•	Task keeps same main price + new extraAmountPaid.
+	•	Logs record this as extra_charge event.
+
+If poster declines:
+	•	Task continues under original price.
+	•	If there’s a major disagreement → they can open a Dispute.
+
+Data you’d track (conceptually):
+	•	extraWorkRequests[] on the task:
+	•	id
+	•	requestedByHelperId
+	•	amount
+	•	reason
+	•	status: "pending" | "accepted" | "rejected" | "paid"
+	•	stripeCheckoutSessionId?
+
+Only accepted + paid extras affect payout.
+
+⸻
+
+12. Tip Function
+
+Use case: Poster wants to reward good work after the job is done.
+
+When tip can be added:
+	•	After task is marked completed, but before it is fully “archived”.
+	•	Shown as a simple prompt:
+	•	“Leave a tip?”
+	•	Suggested buttons: $5, $10, $20, Custom
+
+Flow:
+	1.	Poster selects tip → Stripe Checkout opens for tip only.
+	2.	After successful payment:
+	•	Tip is stored in task as tipAmount.
+	•	Tip is linked to helper and to Stripe payment.
+	3.	Helper sees tip in their history (“Tip: $X”).
+
+Platform fee on tips (your choice):
+	•	Either:
+	•	0% fee on tips (all to helper – good for marketing), or
+	•	Small fee (e.g. 5%)
+	•	Whatever you choose, it’s just:
+	•	tipPlatformFeeAmount
+	•	tipHelperAmount
+
+Data you’d track:
+	•	tipAmount on task
+	•	tipStripePaymentIntentId
+	•	tipCreatedAt
+
+⸻
+
+13. Logging (extended for both)
+
+In your logs, for each job you’ll now see extra events:
+	•	extra_work_requested
+	•	extra_work_accepted
+	•	extra_work_paid
+	•	tip_added
+
+So from your dashboard you can always see:
+	•	Original price
+	•	Extra charges (if any)
+	•	Tip (if any)
+	•	Total cost to poster
+	•	Total owed to helper
