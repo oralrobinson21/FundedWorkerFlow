@@ -1,5 +1,5 @@
 export type UserMode = "poster" | "helper";
-export type TaskStatus = "requested" | "accepted" | "in_progress" | "completed" | "canceled" | "disputed";
+export type TaskStatus = "requested" | "unpaid" | "paid_waiting" | "assigned" | "in_progress" | "worker_marked_done" | "completed" | "canceled" | "disputed";
 export type TaskCategory = "Cleaning" | "Moving" | "Handyman" | "Groceries" | "Other";
 export type SupportTicketStatus = "open" | "in_review" | "closed";
 export type JobOfferStatus = "pending" | "declined" | "accepted";

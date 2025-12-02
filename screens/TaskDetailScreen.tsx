@@ -26,24 +26,31 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const { task: initialTask } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, userMode, tasks, chatThreads, completeTask } = useApp();
+  const { user, userMode, tasks, chatThreads, completeTask, sendOffer } = useApp();
 
-  const task = tasks.find(t => t.id === initialTask.id) || initialTask;
+  const allTasks = tasks ?? [];
+  const allThreads = chatThreads ?? [];
+  
+  const task = allTasks.find(t => t.id === initialTask.id) || initialTask;
   const isPoster = task.posterId === user?.id;
   const isHelper = task.helperId === user?.id;
   const isMyTask = isPoster || isHelper;
 
-  const handleAcceptJob = () => {
+  const handleSendOffer = () => {
     Alert.alert(
-      "Accept Job",
-      `Accept "${task.title}" for $${task.price.toFixed(2)}?`,
+      "Send an Offer",
+      `Would you like to offer your help for "${task.title}"?`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Accept",
+          text: "Send Offer",
           onPress: async () => {
-            await acceptTask(task.id);
-            Alert.alert("Job Accepted", "You can now message the customer.");
+            try {
+              await sendOffer(task.id, "I'd like to help with this task!");
+              Alert.alert("Offer Sent", "The poster will review your offer.");
+            } catch (err) {
+              Alert.alert("Error", "Failed to send offer. Please try again.");
+            }
           },
         },
       ]
@@ -59,7 +66,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   };
 
   const handleMessage = () => {
-    const thread = chatThreads.find(t => t.taskId === task.id);
+    const thread = allThreads.find(t => t.taskId === task.id);
     if (!thread) {
       Alert.alert("No Chat Available", "A chat thread will be created once a helper is chosen and payment is complete.");
       return;
@@ -104,7 +111,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
     }
   };
 
-  const workerEarnings = task.price * (1 - PLATFORM_FEE_PERCENT);
+  const helperEarnings = task.price * (1 - PLATFORM_FEE_PERCENT);
 
   return (
     <ThemedView style={styles.container}>
@@ -135,11 +142,11 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           <View style={styles.metaRow}>
             <Feather name="map-pin" size={16} color={theme.textSecondary} />
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              {task.areaDescription || task.neighborhood}
+              {task.areaDescription || task.zipCode || "Location not specified"}
             </ThemedText>
           </View>
           
-          {(task.status === "assigned" || task.status === "worker_marked_done" || task.status === "completed") && task.fullAddress && isWorker ? (
+          {(task.status === "assigned" || task.status === "worker_marked_done" || task.status === "completed") && task.fullAddress && isHelper ? (
             <View style={[styles.metaRow, { marginTop: Spacing.sm, backgroundColor: theme.backgroundSecondary, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm }]}>
               <Feather name="lock" size={14} color={theme.primary} />
               <View style={{ flex: 1 }}>
@@ -154,9 +161,9 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           ) : null}
           
           <View style={styles.metaRow}>
-            <Feather name="clock" size={16} color={theme.textSecondary} />
+            <Feather name="tag" size={16} color={theme.textSecondary} />
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              {task.timeWindow}
+              {task.category}
             </ThemedText>
           </View>
 
@@ -164,9 +171,9 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
             <ThemedText type="h2" style={{ color: theme.primary }}>
               ${task.price.toFixed(2)}
             </ThemedText>
-            {isWorker ? (
+            {isHelper ? (
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                You'll earn ${workerEarnings.toFixed(2)}
+                You'll earn ${helperEarnings.toFixed(2)}
               </ThemedText>
             ) : null}
           </View>
@@ -179,7 +186,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </ThemedText>
         </View>
 
-        {isCustomer && task.fullAddress ? (
+        {isPoster && task.fullAddress ? (
           <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText type="h4" style={styles.sectionTitle}>Full Address</ThemedText>
             <ThemedText type="body" style={{ color: theme.text, fontWeight: "500" }}>
@@ -188,23 +195,23 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </View>
         ) : null}
 
-        {(task.status === "assigned" || task.status === "completed") && task.workerName ? (
+        {(task.status === "assigned" || task.status === "completed") && task.helperName ? (
           <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText type="h4" style={styles.sectionTitle}>
-              {isCustomer ? "Helper" : "Customer"}
+              {isPoster ? "Helper" : "Poster"}
             </ThemedText>
             <View style={styles.userRow}>
               <View style={[styles.avatar, { backgroundColor: AVATAR_COLORS[Math.floor(Math.random() * 6)] }]}>
                 <ThemedText type="body" style={styles.avatarText}>
-                  {(isCustomer ? task.workerName : task.customerName)?.charAt(0).toUpperCase()}
+                  {(isPoster ? task.helperName : task.posterName)?.charAt(0).toUpperCase()}
                 </ThemedText>
               </View>
               <View style={styles.userInfo}>
                 <ThemedText type="body">
-                  {isCustomer ? task.workerName : task.customerName}
+                  {isPoster ? task.helperName : task.posterName}
                 </ThemedText>
                 <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  {isCustomer ? "Your helper" : "Task owner"}
+                  {isPoster ? "Your helper" : "Task owner"}
                 </ThemedText>
               </View>
             </View>
@@ -214,15 +221,15 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
         <View style={styles.infoCard}>
           <Feather name="info" size={16} color={theme.primary} />
           <ThemedText type="caption" style={{ color: theme.textSecondary, flex: 1 }}>
-            {isWorker
-              ? "Payment is held securely and released to you once the customer confirms completion."
+            {isHelper
+              ? "Payment is held securely and released to you once the poster confirms completion."
               : "Your payment is held securely until you confirm the task is complete."}
           </ThemedText>
         </View>
       </ScreenScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
-        {task.status === "unpaid" && isCustomer && isMyTask ? (
+        {task.status === "unpaid" && isPoster && isMyTask ? (
           <Pressable
             onPress={handleGoToPayment}
             style={({ pressed }) => [
@@ -237,17 +244,17 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </Pressable>
         ) : null}
 
-        {task.status === "paid_waiting" && isWorker && !isMyTask ? (
+        {task.status === "paid_waiting" && userMode === "helper" && !isMyTask ? (
           <Pressable
-            onPress={handleAcceptJob}
+            onPress={handleSendOffer}
             style={({ pressed }) => [
               styles.actionButton,
               { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1 },
             ]}
           >
-            <Feather name="check-circle" size={20} color="#FFFFFF" />
+            <Feather name="send" size={20} color="#FFFFFF" />
             <ThemedText type="body" style={styles.actionButtonText}>
-              Accept This Job
+              Send Offer
             </ThemedText>
           </Pressable>
         ) : null}
@@ -267,7 +274,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
               </ThemedText>
             </Pressable>
             
-            {isCustomer ? (
+            {isPoster ? (
               <Pressable
                 onPress={handleApproveWork}
                 style={({ pressed }) => [
@@ -297,7 +304,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </View>
         ) : null}
 
-        {task.status === "worker_marked_done" && isCustomer && isMyTask ? (
+        {task.status === "worker_marked_done" && isPoster && isMyTask ? (
           <View style={styles.buttonRow}>
             <Pressable
               onPress={handleMessage}
@@ -338,7 +345,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
             >
               <Feather name="message-circle" size={20} color="#FFFFFF" />
               <ThemedText type="body" style={styles.actionButtonText}>
-                Discuss with {isCustomer ? "Helper" : "Customer"}
+                Discuss with {isPoster ? "Helper" : "Poster"}
               </ThemedText>
             </Pressable>
           </View>
