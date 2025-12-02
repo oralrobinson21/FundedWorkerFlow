@@ -6,6 +6,14 @@ channel = "stable-24_05"
 packages = ["nodejs"]
 
 [[ports]]
+localPort = 3001
+externalPort = 6800
+
+[[ports]]
+localPort = 5000
+externalPort = 8008
+
+[[ports]]
 localPort = 8081
 externalPort = 80
 
@@ -20,6 +28,10 @@ externalPort = 5000
 [[ports]]
 localPort = 35711
 externalPort = 3001
+
+[[ports]]
+localPort = 36721
+externalPort = 8000
 
 [[ports]]
 localPort = 40235
@@ -121,3 +133,4 @@ value = "0"
 MIN_JOB_PRICE_USD = "7"
 PLATFORM_FEE_PERCENT = "15"
 API_BASE_URL = "http://localhost:3001"
+EXPO_PUBLIC_API_URL = "https://b3072cff-05d1-4215-a0a7-15b131b8ea4a-00-wd3ym4rbzcjm.kirk.replit.dev"

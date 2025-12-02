@@ -8,6 +8,9 @@
     "scheme": "citytasks",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "apiUrl": "https://b3072cff-05d1-4215-a0a7-15b131b8ea4a-00-wd3ym4rbzcjm.kirk.replit.dev"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.citytasks.app"

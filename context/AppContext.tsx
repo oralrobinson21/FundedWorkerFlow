@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, Task, JobOffer, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode, generateOTP } from "@/types";
+import { API_BASE_URL } from "@/utils/api";
 
 interface AppContextType {
   user: User | null;
@@ -166,54 +167,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const sendOTPCode = async (email: string): Promise<{ success: boolean; message: string }> => {
-    const code = generateOTP();
-    const expiresAt = Date.now() + 10 * 60 * 1000;
-    const newOTP: StoredOTP = { email, code, expiresAt };
-    const updatedOTPs = storedOTPs.filter(otp => otp.email !== email || otp.expiresAt > Date.now());
-    updatedOTPs.push(newOTP);
-    setStoredOTPs(updatedOTPs);
-    await saveOTPs(updatedOTPs);
-    console.log(`[DEV] OTP Code for ${email}: ${code}`);
-    return { success: true, message: `Code sent to ${email}` };
+    try {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        return { success: false, message: error.error || "Failed to send code" };
+      }
+      
+      return { success: true, message: `Code sent to ${email}` };
+    } catch (error) {
+      console.error("sendOTPCode error:", error);
+      return { success: false, message: "Network error. Please try again." };
+    }
   };
 
   const verifyOTPCode = async (email: string, code: string): Promise<{ success: boolean; user?: User; message: string }> => {
-    const otp = storedOTPs.find(o => o.email === email && o.code === code && o.expiresAt > Date.now());
-    if (!otp) {
-      return { success: false, message: "Invalid or expired code" };
-    }
-    const updatedOTPs = storedOTPs.filter(o => o.email !== email);
-    setStoredOTPs(updatedOTPs);
-    await saveOTPs(updatedOTPs);
-    const newUser: User = {
-      id: generateId(),
-      email,
-      accountNumber: generateId(),
-      createdAt: new Date().toISOString(),
-    };
-    setUser(newUser);
-    await saveUser(newUser);
-
-    // Sync user to backend
     try {
-      const API_URL = "http://localhost:3001";
-      await fetch(`${API_URL}/api/users`, {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify({ email, code }),
       });
-    } catch (err) {
-      console.error("Failed to sync user to backend:", err);
+      
+      if (!response.ok) {
+        const error = await response.json();
+        return { success: false, message: error.error || "Invalid or expired code" };
+      }
+      
+      const data = await response.json();
+      const newUser: User = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        phone: data.user.phone,
+        defaultZipCode: data.user.defaultZipCode,
+        accountNumber: data.user.id,
+        createdAt: new Date().toISOString(),
+      };
+      
+      setUser(newUser);
+      await saveUser(newUser);
+      
+      return { success: true, user: newUser, message: "Logged in" };
+    } catch (error) {
+      console.error("verifyOTPCode error:", error);
+      return { success: false, message: "Network error. Please try again." };
     }
-
-    return { success: true, user: newUser, message: "Logged in" };
   };
 
   const updateUserProfile = async (phone?: string, defaultZipCode?: string) => {
     if (!user) throw new Error("User not logged in");
-    const updatedUser = { ...user, phone, defaultZipCode };
-    setUser(updatedUser);
-    await saveUser(updatedUser);
+    
+    try {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/users/${user.id}`, {
+        method: "PUT",
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ name: user.name, phone, defaultZipCode }),
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to update profile");
+      }
+      
+      const data = await response.json();
+      const updatedUser = { ...user, phone: data.phone, defaultZipCode: data.defaultZipCode };
+      setUser(updatedUser);
+      await saveUser(updatedUser);
+    } catch (error) {
+      console.error("updateUserProfile error:", error);
+      throw error;
+    }
   };
 
   const login = async (name: string, email: string, phone?: string, defaultZipCode?: string) => {
@@ -244,7 +278,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error("User not logged in");
     
     try {
-      const API_URL = "http://localhost:3001";
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/api/tasks`, {
         method: "POST",
         headers: {
@@ -274,7 +308,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) throw new Error("User not logged in");
     
     try {
-      const API_URL = "http://localhost:3001";
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/api/tasks/${taskId}/offers`, {
         method: "POST",
         headers: {
@@ -309,7 +343,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!task) throw new Error("Task not found");
 
     try {
-      const API_URL = "http://localhost:3001";
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/api/tasks/${taskId}/choose-helper`, {
         method: "POST",
         headers: {
@@ -335,7 +369,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const initializeStripeConnect = async (): Promise<{ url?: string }> => {
     if (!user) throw new Error("User not logged in");
     try {
-      const API_URL = "http://localhost:3001";
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/api/stripe/connect/onboard`, {
         method: "POST",
         headers: {
@@ -357,18 +391,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const completeTask = async (taskId: string) => {
-    const updatedTasks = tasks.map(task =>
-      task.id === taskId ? { ...task, status: "completed" as TaskStatus, completedAt: new Date().toISOString() } : task
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
+    if (!user) throw new Error("User not logged in");
+    
+    try {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/tasks/${taskId}/complete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to complete task");
+      }
+      
+      const updatedTask = await response.json();
+      const updatedTasks = tasks.map(task =>
+        task.id === taskId ? { ...task, status: "completed" as TaskStatus, completedAt: updatedTask.completed_at } : task
+      );
+      setTasks(updatedTasks);
+      await saveTasks(updatedTasks);
+    } catch (error) {
+      console.error("completeTask error:", error);
+      throw error;
+    }
   };
 
   const cancelTask = async (taskId: string, canceledBy: "poster" | "helper") => {
     if (!user) throw new Error("User not logged in");
     
     try {
-      const API_URL = "http://localhost:3001";
+      const API_URL = API_BASE_URL;
       const response = await fetch(`${API_URL}/api/tasks/${taskId}/cancel`, {
         method: "POST",
         headers: {
@@ -395,11 +451,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const disputeTask = async (taskId: string) => {
-    const updatedTasks = tasks.map(task =>
-      task.id === taskId ? { ...task, status: "disputed" as TaskStatus } : task
-    );
-    setTasks(updatedTasks);
-    await saveTasks(updatedTasks);
+    if (!user) throw new Error("User not logged in");
+    
+    try {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/tasks/${taskId}/dispute`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to dispute task");
+      }
+      
+      const updatedTasks = tasks.map(task =>
+        task.id === taskId ? { ...task, status: "disputed" as TaskStatus } : task
+      );
+      setTasks(updatedTasks);
+      await saveTasks(updatedTasks);
+    } catch (error) {
+      console.error("disputeTask error:", error);
+      throw error;
+    }
   };
 
   const sendChatMessage = async (threadId: string, text?: string, imageUrl?: string, isProof: boolean = false) => {

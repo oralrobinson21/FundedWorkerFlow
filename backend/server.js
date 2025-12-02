@@ -6,7 +6,7 @@ const { pool, initDatabase } = require('./db');
 const { getStripeClient, getStripeSync, getStripePublishableKey } = require('./stripeClient');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.BACKEND_PORT || 5000;
 
 // Helper: Generate ID
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
