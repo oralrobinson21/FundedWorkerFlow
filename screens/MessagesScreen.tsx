@@ -34,7 +34,20 @@ function formatTime(timestamp: string): string {
 
 export default function MessagesScreen({ navigation }: MessagesScreenProps) {
   const { theme } = useTheme();
-  const { conversations, user } = useApp();
+  const { chatThreads, user } = useApp();
+
+  // Convert chatThreads to conversation format
+  const conversations = (chatThreads ?? []).map(thread => ({
+    id: thread.id,
+    taskId: thread.taskId,
+    otherUserId: thread.posterId === user?.id ? thread.helperId : thread.posterId,
+    otherUserName: thread.posterId === user?.id ? "Helper" : "Poster",
+    otherUserAvatarIndex: 0,
+    unreadCount: 0,
+    lastMessageTime: thread.createdAt,
+    taskTitle: "Ongoing Task",
+    lastMessage: "No messages yet"
+  }));
 
   const userConversations = conversations.filter(conv => 
     conv.otherUserId !== user?.id
