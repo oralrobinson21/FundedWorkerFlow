@@ -1,0 +1,181 @@
+Right now that screen is basically just a pretty picture – those big green/blue blocks aren’t actually wired to do anything, so taps don’t go anywhere.
+
+Let’s fix that by turning that CityTasks / mode-selector screen into a real React Navigation screen with onPress handlers.
+
+⸻
+
+1️⃣ Replace your “CityTasks” / mode selector screen with this
+
+Find the file for that screen (it might be called ModeSelectorScreen.tsx, LandingScreen.tsx, HomeRoleScreen.tsx, etc.). Replace its component code with something like this (adjust paths/names if needed):
+
+// ModeSelectorScreen.tsx (or whatever your file is called)
+
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useAppContext } from '../context/AppContext'; // adjust path
+
+const ModeSelectorScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const { setUserMode } = useAppContext();
+
+  const handleNeedHelp = () => {
+    console.log('Need help with tasks pressed');
+    // set mode to poster
+    setUserMode('poster');
+    // send them into the main app flow (tabs / category screen)
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }], // or 'Category', 'Home', etc. – whatever your main app route is
+    });
+  };
+
+  const handleEarnMoney = () => {
+    console.log('Want to earn money pressed');
+    // set mode to helper
+    setUserMode('helper');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }], // same root, but mode=helper so UI changes
+    });
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.card}>
+        {/* Logo / title */}
+        <View style={styles.logo} />
+        <Text style={styles.title}>CityTasks</Text>
+        <Text style={styles.subtitle}>Get small jobs done. Help your neighbors.</Text>
+
+        {/* Poster button */}
+        <TouchableOpacity style={[styles.button, styles.posterButton]} onPress={handleNeedHelp}>
+          <Text style={styles.buttonTitle}>I need help with tasks</Text>
+          <Text style={styles.buttonSubtitle}>Post jobs and get things done</Text>
+        </TouchableOpacity>
+
+        {/* Helper button */}
+        <TouchableOpacity style={[styles.button, styles.helperButton]} onPress={handleEarnMoney}>
+          <Text style={styles.buttonTitle}>I want to earn money</Text>
+          <Text style={styles.buttonSubtitle}>Accept jobs and get paid</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.footer}>
+          By continuing, you agree to our Terms of Service and Privacy Policy
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+export default ModeSelectorScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  card: {
+    width: '90%',
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    backgroundColor: '#111',
+  },
+  logo: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: '#3ad3ff',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: 'white',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#bbb',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  button: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  posterButton: {
+    backgroundColor: '#00c66f',
+  },
+  helperButton: {
+    backgroundColor: '#4b63ff',
+  },
+  buttonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  buttonSubtitle: {
+    fontSize: 13,
+    color: '#e5e5e5',
+    marginTop: 4,
+  },
+  footer: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 16,
+  },
+});
+
+This does two key things:
+	•	Calls setUserMode('poster' | 'helper') in your context so the rest of the app knows which mode they’re in.
+	•	Uses navigation.reset({ routes: [{ name: 'MainTabs' }] }) to jump into your main tab navigator.
+
+⸻
+
+2️⃣ Make sure the route name exists
+
+In your main navigator file (where you define stacks/tabs), you need a screen whose name matches what we navigated to – I used 'MainTabs' as an example.
+
+For example:
+
+// AppNavigator.tsx
+
+import ModeSelectorScreen from './screens/ModeSelectorScreen';
+import MainTabs from './navigation/MainTabs'; // your tab navigator
+
+<NavigationContainer>
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="ModeSelector" component={ModeSelectorScreen} />
+    <Stack.Screen name="MainTabs" component={MainTabs} />
+  </Stack.Navigator>
+</NavigationContainer>
+
+If your tab navigator is called something else (like 'HomeTabs' or 'RootTabs'), then just change the navigation.reset({ routes: [{ name: 'MainTabs' }] }) calls to that exact name.
+
+⸻
+
+3️⃣ Quick test
+
+After you paste this:
+	1.	Save the file.
+	2.	Reload the Expo app.
+	3.	Tap “I need help with tasks”:
+	•	You should see a console.log('Need help with tasks pressed') in your Metro logs.
+	•	Screen should change to your main app / tabs.
+	4.	Tap “I want to earn money”:
+	•	Should log and go to same root, but in helper mode.
+
+If you see the console logs but navigation doesn’t move, it’s just a route-name mismatch; change 'MainTabs' to whatever your actual tab stack is called.
+
+⸻
+
+If you want, paste your current navigator file (where you define NavigationContainer and the stacks/tabs) and I’ll align the route names exactly so the mode selector buttons definitely navigate.
