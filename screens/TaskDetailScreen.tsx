@@ -1,9 +1,10 @@
-import React from "react";
-import { View, StyleSheet, Pressable, Alert } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, Pressable, Alert, TextInput, Modal } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RouteProp } from "@react-navigation/native";
+import * as WebBrowser from "expo-web-browser";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -13,7 +14,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { Task, PLATFORM_FEE_PERCENT } from "@/types";
+import { Task, PLATFORM_FEE_PERCENT, ExtraWorkRequest } from "@/types";
 
 type TaskDetailScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "TaskDetail">;
@@ -21,12 +22,22 @@ type TaskDetailScreenProps = {
 };
 
 const AVATAR_COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD"];
+const TIP_AMOUNTS = [5, 10, 20];
 
 export default function TaskDetailScreen({ navigation, route }: TaskDetailScreenProps) {
   const { task: initialTask } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, userMode, tasks, chatThreads, completeTask, sendOffer, hasProfilePhoto } = useApp();
+  const { user, userMode, tasks, chatThreads, completeTask, sendOffer, hasProfilePhoto, apiUrl } = useApp();
+
+  const [extraWorkRequests, setExtraWorkRequests] = useState<ExtraWorkRequest[]>([]);
+  const [showExtraWorkModal, setShowExtraWorkModal] = useState(false);
+  const [extraAmount, setExtraAmount] = useState("");
+  const [extraReason, setExtraReason] = useState("");
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [tipAmount, setTipAmount] = useState("");
+  const [customTip, setCustomTip] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const allTasks = tasks ?? [];
   const allThreads = chatThreads ?? [];
@@ -35,6 +46,37 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const isPoster = task.posterId === user?.id;
   const isHelper = task.helperId === user?.id;
   const isMyTask = isPoster || isHelper;
+
+  useEffect(() => {
+    if (task.id && (task.status === "accepted" || task.status === "in_progress" || task.status === "completed")) {
+      fetchExtraWorkRequests();
+    }
+  }, [task.id, task.status]);
+
+  const fetchExtraWorkRequests = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/tasks/${task.id}/extra-work`);
+      if (response.ok) {
+        const data = await response.json();
+        setExtraWorkRequests(data.map((r: any) => ({
+          id: r.id,
+          taskId: r.task_id,
+          helperId: r.helper_id,
+          amount: parseFloat(r.amount),
+          reason: r.reason,
+          photoUrls: r.photo_urls || [],
+          status: r.status,
+          stripeCheckoutSessionId: r.stripe_checkout_session_id,
+          stripePaymentIntentId: r.stripe_payment_intent_id,
+          createdAt: r.created_at,
+          respondedAt: r.responded_at,
+          paidAt: r.paid_at,
+        })));
+      }
+    } catch (err) {
+      console.error("Failed to fetch extra work requests:", err);
+    }
+  };
 
   const handleSendOffer = async () => {
     const hasPhoto = await hasProfilePhoto();
@@ -95,6 +137,150 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
     navigation.navigate("Payment", { task });
   };
 
+  const handleRequestExtraWork = async () => {
+    const amount = parseFloat(extraAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid amount.");
+      return;
+    }
+    if (!extraReason.trim()) {
+      Alert.alert("Reason Required", "Please explain why extra work is needed.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/tasks/${task.id}/extra-work`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user?.id || "",
+        },
+        body: JSON.stringify({
+          amount,
+          reason: extraReason.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to submit request");
+      }
+
+      Alert.alert("Request Sent", "The poster will review your extra work request.");
+      setShowExtraWorkModal(false);
+      setExtraAmount("");
+      setExtraReason("");
+      fetchExtraWorkRequests();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to submit extra work request.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAcceptExtraWork = async (requestId: string) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/extra-work/${requestId}/accept`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user?.id || "",
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to accept request");
+      }
+
+      const data = await response.json();
+      if (data.checkoutUrl) {
+        await WebBrowser.openBrowserAsync(data.checkoutUrl);
+      }
+      fetchExtraWorkRequests();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to accept extra work request.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeclineExtraWork = async (requestId: string) => {
+    Alert.alert(
+      "Decline Request",
+      "Are you sure you want to decline this extra work request? The helper can still complete the job at the original price.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Decline",
+          style: "destructive",
+          onPress: async () => {
+            setIsLoading(true);
+            try {
+              const response = await fetch(`${apiUrl}/api/extra-work/${requestId}/decline`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-user-id": user?.id || "",
+                },
+              });
+
+              if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || "Failed to decline request");
+              }
+
+              fetchExtraWorkRequests();
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to decline request.");
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSendTip = async () => {
+    const amount = tipAmount === "custom" ? parseFloat(customTip) : parseFloat(tipAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid tip amount.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/tasks/${task.id}/tip`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user?.id || "",
+        },
+        body: JSON.stringify({ amount }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create tip");
+      }
+
+      const data = await response.json();
+      if (data.checkoutUrl) {
+        await WebBrowser.openBrowserAsync(data.checkoutUrl);
+      }
+      setShowTipModal(false);
+      setTipAmount("");
+      setCustomTip("");
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to send tip.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const getStatusBannerStyle = () => {
     switch (task.status) {
       case "paid_waiting":
@@ -128,6 +314,8 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   };
 
   const helperEarnings = task.price * (1 - PLATFORM_FEE_PERCENT);
+  const pendingExtraRequests = extraWorkRequests.filter(r => r.status === "pending");
+  const totalExtraPaid = task.extraAmountPaid || 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -187,6 +375,16 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
             <ThemedText type="h2" style={{ color: theme.primary }}>
               ${task.price.toFixed(2)}
             </ThemedText>
+            {totalExtraPaid > 0 ? (
+              <ThemedText type="caption" style={{ color: theme.success }}>
+                + ${totalExtraPaid.toFixed(2)} extra work
+              </ThemedText>
+            ) : null}
+            {task.tipAmount ? (
+              <ThemedText type="caption" style={{ color: theme.success }}>
+                + ${task.tipAmount.toFixed(2)} tip
+              </ThemedText>
+            ) : null}
             {isHelper ? (
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>
                 You'll earn ${helperEarnings.toFixed(2)}
@@ -234,6 +432,71 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </View>
         ) : null}
 
+        {pendingExtraRequests.length > 0 && isPoster ? (
+          <View style={[styles.card, { backgroundColor: theme.warning + "15", borderWidth: 1, borderColor: theme.warning }]}>
+            <View style={styles.cardHeader}>
+              <Feather name="alert-circle" size={20} color={theme.warning} />
+              <ThemedText type="h4" style={{ color: theme.warning }}>Extra Work Request</ThemedText>
+            </View>
+            {pendingExtraRequests.map((request) => (
+              <View key={request.id} style={styles.extraWorkItem}>
+                <ThemedText type="body" style={{ marginBottom: Spacing.sm }}>
+                  Helper requested <ThemedText type="body" style={{ fontWeight: "700", color: theme.primary }}>+${request.amount.toFixed(2)}</ThemedText> for additional work
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.md }}>
+                  "{request.reason}"
+                </ThemedText>
+                <View style={styles.buttonRow}>
+                  <Pressable
+                    onPress={() => handleDeclineExtraWork(request.id)}
+                    style={({ pressed }) => [
+                      styles.declineButton,
+                      { borderColor: theme.error, opacity: pressed ? 0.8 : 1 },
+                    ]}
+                    disabled={isLoading}
+                  >
+                    <ThemedText type="body" style={{ color: theme.error, fontWeight: "600" }}>
+                      Decline
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleAcceptExtraWork(request.id)}
+                    style={({ pressed }) => [
+                      styles.actionButton,
+                      { backgroundColor: theme.success, opacity: pressed ? 0.9 : 1, flex: 1 },
+                    ]}
+                    disabled={isLoading}
+                  >
+                    <Feather name="check" size={18} color="#FFFFFF" />
+                    <ThemedText type="body" style={styles.actionButtonText}>
+                      Accept & Pay
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {extraWorkRequests.filter(r => r.status === "paid").length > 0 ? (
+          <View style={[styles.card, { backgroundColor: theme.success + "10" }]}>
+            <ThemedText type="h4" style={styles.sectionTitle}>Extra Work Paid</ThemedText>
+            {extraWorkRequests.filter(r => r.status === "paid").map((request) => (
+              <View key={request.id} style={styles.paidExtraItem}>
+                <Feather name="check-circle" size={16} color={theme.success} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="body" style={{ color: theme.success }}>
+                    +${request.amount.toFixed(2)}
+                  </ThemedText>
+                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                    {request.reason}
+                  </ThemedText>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <View style={styles.infoCard}>
           <Feather name="info" size={16} color={theme.primary} />
           <ThemedText type="caption" style={{ color: theme.textSecondary, flex: 1 }}>
@@ -275,7 +538,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </Pressable>
         ) : null}
 
-        {task.status === "assigned" && isMyTask ? (
+        {(task.status === "assigned" || task.status === "accepted" || task.status === "in_progress") && isMyTask ? (
           <View style={styles.buttonRow}>
             <Pressable
               onPress={handleMessage}
@@ -304,18 +567,29 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
                 </ThemedText>
               </Pressable>
             ) : (
-              <Pressable
-                onPress={handleMarkJobDone}
-                style={({ pressed }) => [
-                  styles.actionButton,
-                  { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1, flex: 1 },
-                ]}
-              >
-                <Feather name="camera" size={20} color="#FFFFFF" />
-                <ThemedText type="body" style={styles.actionButtonText}>
-                  Mark Done
-                </ThemedText>
-              </Pressable>
+              <View style={{ flex: 1, flexDirection: "row", gap: Spacing.sm }}>
+                <Pressable
+                  onPress={() => setShowExtraWorkModal(true)}
+                  style={({ pressed }) => [
+                    styles.extraWorkButton,
+                    { borderColor: theme.warning, opacity: pressed ? 0.9 : 1 },
+                  ]}
+                >
+                  <Feather name="plus-circle" size={18} color={theme.warning} />
+                </Pressable>
+                <Pressable
+                  onPress={handleMarkJobDone}
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1, flex: 1 },
+                  ]}
+                >
+                  <Feather name="camera" size={20} color="#FFFFFF" />
+                  <ThemedText type="body" style={styles.actionButtonText}>
+                    Mark Done
+                  </ThemedText>
+                </Pressable>
+              </View>
             )}
           </View>
         ) : null}
@@ -368,14 +642,175 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
         ) : null}
 
         {task.status === "completed" ? (
-          <View style={[styles.completedBanner, { backgroundColor: theme.success + "15" }]}>
-            <Feather name="check-circle" size={24} color={theme.success} />
-            <ThemedText type="body" style={{ color: theme.success, fontWeight: "600" }}>
-              Task Completed Successfully
-            </ThemedText>
+          <View>
+            <View style={[styles.completedBanner, { backgroundColor: theme.success + "15" }]}>
+              <Feather name="check-circle" size={24} color={theme.success} />
+              <ThemedText type="body" style={{ color: theme.success, fontWeight: "600" }}>
+                Task Completed Successfully
+              </ThemedText>
+            </View>
+            {isPoster && !task.tipAmount ? (
+              <Pressable
+                onPress={() => setShowTipModal(true)}
+                style={({ pressed }) => [
+                  styles.tipButton,
+                  { backgroundColor: theme.primary + "15", borderColor: theme.primary, opacity: pressed ? 0.9 : 1 },
+                ]}
+              >
+                <Feather name="heart" size={20} color={theme.primary} />
+                <ThemedText type="body" style={{ color: theme.primary, fontWeight: "600" }}>
+                  Leave a Tip
+                </ThemedText>
+              </Pressable>
+            ) : null}
+            {task.tipAmount ? (
+              <View style={[styles.tipBadge, { backgroundColor: theme.success + "15" }]}>
+                <Feather name="heart" size={16} color={theme.success} />
+                <ThemedText type="body" style={{ color: theme.success }}>
+                  {isPoster ? "You tipped" : "You received a tip of"} ${task.tipAmount.toFixed(2)}
+                </ThemedText>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
+
+      <Modal
+        visible={showExtraWorkModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowExtraWorkModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="h3">Request Extra Payment</ThemedText>
+              <Pressable onPress={() => setShowExtraWorkModal(false)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            
+            <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.lg }}>
+              If the job requires more work than described, you can request additional payment from the poster.
+            </ThemedText>
+
+            <ThemedText type="body" style={{ marginBottom: Spacing.sm }}>Extra Amount ($)</ThemedText>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+              placeholder="e.g. 20"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="decimal-pad"
+              value={extraAmount}
+              onChangeText={setExtraAmount}
+            />
+
+            <ThemedText type="body" style={{ marginBottom: Spacing.sm, marginTop: Spacing.md }}>Reason</ThemedText>
+            <TextInput
+              style={[styles.input, styles.textArea, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+              placeholder="Explain what additional work is needed..."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              numberOfLines={4}
+              value={extraReason}
+              onChangeText={setExtraReason}
+            />
+
+            <Pressable
+              onPress={handleRequestExtraWork}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1, marginTop: Spacing.xl },
+              ]}
+              disabled={isLoading}
+            >
+              <ThemedText type="body" style={styles.actionButtonText}>
+                {isLoading ? "Sending..." : "Send Request"}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showTipModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTipModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="h3">Leave a Tip</ThemedText>
+              <Pressable onPress={() => setShowTipModal(false)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            
+            <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.lg }}>
+              Show your appreciation for a job well done! 100% of the tip goes to the helper.
+            </ThemedText>
+
+            <View style={styles.tipAmountRow}>
+              {TIP_AMOUNTS.map((amount) => (
+                <Pressable
+                  key={amount}
+                  onPress={() => { setTipAmount(amount.toString()); setCustomTip(""); }}
+                  style={[
+                    styles.tipAmountButton,
+                    { 
+                      backgroundColor: tipAmount === amount.toString() ? theme.primary : theme.backgroundSecondary,
+                      borderColor: tipAmount === amount.toString() ? theme.primary : theme.border,
+                    },
+                  ]}
+                >
+                  <ThemedText type="body" style={{ color: tipAmount === amount.toString() ? "#FFFFFF" : theme.text, fontWeight: "600" }}>
+                    ${amount}
+                  </ThemedText>
+                </Pressable>
+              ))}
+              <Pressable
+                onPress={() => setTipAmount("custom")}
+                style={[
+                  styles.tipAmountButton,
+                  { 
+                    backgroundColor: tipAmount === "custom" ? theme.primary : theme.backgroundSecondary,
+                    borderColor: tipAmount === "custom" ? theme.primary : theme.border,
+                  },
+                ]}
+              >
+                <ThemedText type="body" style={{ color: tipAmount === "custom" ? "#FFFFFF" : theme.text, fontWeight: "600" }}>
+                  Other
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {tipAmount === "custom" ? (
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border, marginTop: Spacing.md }]}
+                placeholder="Enter amount"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="decimal-pad"
+                value={customTip}
+                onChangeText={setCustomTip}
+              />
+            ) : null}
+
+            <Pressable
+              onPress={handleSendTip}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { backgroundColor: theme.primary, opacity: pressed ? 0.9 : 1, marginTop: Spacing.xl },
+              ]}
+              disabled={isLoading || (!tipAmount || (tipAmount === "custom" && !customTip))}
+            >
+              <Feather name="heart" size={18} color="#FFFFFF" />
+              <ThemedText type="body" style={styles.actionButtonText}>
+                {isLoading ? "Processing..." : `Send Tip${tipAmount && tipAmount !== "custom" ? ` ($${tipAmount})` : customTip ? ` ($${customTip})` : ""}`}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -414,6 +849,12 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     borderRadius: BorderRadius.lg,
     marginBottom: Spacing.lg,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   taskTitle: {
     marginBottom: Spacing.md,
@@ -493,5 +934,91 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,
+  },
+  extraWorkItem: {
+    paddingTop: Spacing.sm,
+  },
+  declineButton: {
+    height: Spacing.buttonHeight,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paidExtraItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  extraWorkButton: {
+    width: 48,
+    height: Spacing.buttonHeight,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tipButton: {
+    height: Spacing.buttonHeight,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  tipBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.md,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    paddingBottom: Spacing.xxxl,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.lg,
+  },
+  input: {
+    height: 48,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    fontSize: 16,
+  },
+  textArea: {
+    height: 100,
+    paddingTop: Spacing.md,
+    textAlignVertical: "top",
+  },
+  tipAmountRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  tipAmountButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
