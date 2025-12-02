@@ -13,11 +13,13 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { NEIGHBORHOODS } from "@/types";
+import { NEIGHBORHOODS, CATEGORIES, TaskCategory } from "@/types";
 
 type CreateTaskScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "CreateTask">;
 };
+
+const neighborhoods = NEIGHBORHOODS ?? [];
 
 export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) {
   const insets = useSafeAreaInsets();
@@ -26,15 +28,18 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<TaskCategory>("Other");
   const [neighborhood, setNeighborhood] = useState("");
+  const [zipCode, setZipCode] = useState("");
   const [areaDescription, setAreaDescription] = useState("");
   const [fullAddress, setFullAddress] = useState("");
   const [price, setPrice] = useState("20");
-  const [timeWindow, setTimeWindow] = useState("Today, Next 3 hours");
+  const [photosRequired, setPhotosRequired] = useState(false);
   const [showNeighborhoodPicker, setShowNeighborhoodPicker] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isValid = title.trim() && description.trim() && neighborhood && areaDescription.trim() && fullAddress.trim() && parseFloat(price) >= 5;
+  const isValid = title.trim() && description.trim() && category && zipCode.trim() && areaDescription.trim() && fullAddress.trim() && parseFloat(price) >= 7;
 
   const handleSubmit = async () => {
     if (!isValid || isSubmitting) return;
@@ -44,11 +49,12 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
       const task = await createTask({
         title: title.trim(),
         description: description.trim(),
-        neighborhood,
+        category,
+        zipCode: zipCode.trim(),
         areaDescription: areaDescription.trim(),
         fullAddress: fullAddress.trim(),
         price: parseFloat(price),
-        timeWindow,
+        photosRequired,
       });
       navigation.replace("Payment", { task });
     } catch (error) {
@@ -178,16 +184,84 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
         </View>
 
         <View style={styles.field}>
-          <ThemedText type="small" style={styles.label}>Time Window</ThemedText>
+          <ThemedText type="small" style={styles.label}>Category</ThemedText>
+          <Pressable
+            onPress={() => setShowCategoryPicker(true)}
+            style={[inputStyle, styles.picker]}
+          >
+            <ThemedText type="body" style={styles.pickerText}>
+              {category}
+            </ThemedText>
+            <Feather name="chevron-down" size={20} color={theme.textSecondary} />
+          </Pressable>
+        </View>
+
+        <View style={styles.field}>
+          <ThemedText type="small" style={styles.label}>Zip Code</ThemedText>
           <TextInput
             style={inputStyle}
-            value={timeWindow}
-            onChangeText={setTimeWindow}
-            placeholder="e.g., Today 2-5pm"
+            value={zipCode}
+            onChangeText={setZipCode}
+            placeholder="e.g., 10451"
             placeholderTextColor={theme.textSecondary}
+            keyboardType="number-pad"
+            maxLength={10}
           />
         </View>
+
+        <View style={styles.field}>
+          <Pressable
+            onPress={() => setPhotosRequired(!photosRequired)}
+            style={styles.checkboxRow}
+          >
+            <View style={[styles.checkbox, { borderColor: theme.border, backgroundColor: photosRequired ? theme.primary : 'transparent' }]}>
+              {photosRequired ? <Feather name="check" size={14} color="#FFFFFF" /> : null}
+            </View>
+            <ThemedText type="body">Require completion photo</ThemedText>
+          </Pressable>
+        </View>
       </ScrollComponent>
+
+      <Modal
+        visible={showCategoryPicker}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCategoryPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="h4">Select Category</ThemedText>
+              <Pressable onPress={() => setShowCategoryPicker(false)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.neighborhoodList}>
+              {CATEGORIES.map((item) => (
+                <Pressable
+                  key={item}
+                  onPress={() => {
+                    setCategory(item);
+                    setShowCategoryPicker(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.neighborhoodItem,
+                    { 
+                      backgroundColor: item === category ? `${theme.primary}20` : (pressed ? theme.backgroundSecondary : 'transparent'),
+                      borderColor: item === category ? theme.primary : 'transparent',
+                    }
+                  ]}
+                >
+                  <ThemedText type="body" style={{ fontWeight: item === category ? '600' : '400' }}>
+                    {item}
+                  </ThemedText>
+                  {item === category ? <Feather name="check" size={18} color={theme.primary} /> : null}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
         <Pressable
@@ -223,11 +297,12 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
               </Pressable>
             </View>
             <ScrollView style={styles.neighborhoodList}>
-              {NEIGHBORHOODS.map((item) => (
+              {neighborhoods.map((item) => (
                 <Pressable
                   key={item}
                   onPress={() => {
                     setNeighborhood(item);
+                    setAreaDescription(item);
                     setShowNeighborhoodPicker(false);
                   }}
                   style={({ pressed }) => [
@@ -361,5 +436,18 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     paddingHorizontal: Spacing.xl,
     borderBottomWidth: 1,
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

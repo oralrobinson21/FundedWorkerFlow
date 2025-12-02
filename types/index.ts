@@ -117,6 +117,35 @@ export interface Message {
 export const CATEGORIES: TaskCategory[] = ["Cleaning", "Moving", "Handyman", "Groceries", "Other"];
 export const PLATFORM_FEE_PERCENT = 0.10;
 
+export const NEIGHBORHOODS = [
+  "Bronx - 170th & Grand Concourse",
+  "Bronx - Fordham",
+  "Bronx - Hunts Point",
+  "Bronx - Mott Haven",
+  "Harlem",
+  "Washington Heights",
+  "Inwood",
+  "Lower East Side",
+  "East Village",
+  "Chelsea",
+  "Midtown",
+  "Upper West Side",
+  "Upper East Side",
+  "Brooklyn - Williamsburg",
+  "Brooklyn - Bushwick",
+  "Brooklyn - Bedford-Stuyvesant",
+  "Brooklyn - Crown Heights",
+  "Brooklyn - Park Slope",
+  "Brooklyn - Downtown Brooklyn",
+  "Queens - Astoria",
+  "Queens - Long Island City",
+  "Queens - Jackson Heights",
+  "Queens - Flushing",
+  "Queens - Jamaica",
+  "Staten Island - St. George",
+  "Staten Island - New Dorp",
+];
+
 function generateConfirmationCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
