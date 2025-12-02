@@ -4,23 +4,24 @@
 Marketplace app where posters post job requests for free, helpers send offers with notes, posters choose a helper and pay via Stripe Checkout, then chat and complete the job with photo proof.
 
 ## Architecture
-- **Frontend**: Expo/React Native mobile app (App directory)
+- **Frontend**: Expo/React Native mobile app
 - **Backend**: Node.js/Express API with Stripe Connect Express integration
 - **Auth**: Email + OTP passwordless login with 6-digit codes (logged to console in dev)
-- **Database**: Mock in-memory for MVP (ready for real DB)
+- **Database**: PostgreSQL via Replit's built-in database
 
 ## Current Status
 
-### ✅ Completed
+### ✅ Completed MVP
 - Email + OTP authentication system with LoginScreen and VerifyScreen
 - User mode selection (poster/helper) with OnboardingScreen
 - Standardized terminology: poster/helper throughout (not customer/worker)
 - Type definitions with Stripe fields and proper TaskStatus enum
 - AppContext with all methods including userMode, setUserMode, sendOTPCode, verifyOTPCode
 - Screens: LoginScreen, VerifyScreen, OnboardingScreen, CategoryScreen, CreateTaskScreen, JobListScreen, TaskDetailScreen, ProfileScreen, MessagesScreen
+- Full backend API integration with proper URL routing
 
 ### ✅ Backend Implementation
-- Express server with all endpoints
+- Express server on port 5000 with all endpoints
 - Stripe Connect Express onboarding for helpers
 - Task creation with $7 minimum enforcement
 - Offer system
@@ -29,13 +30,6 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - Chat system with proof photos
 - Task completion with photo validation
 - Cancel/dispute endpoints
-
-### 🔄 Next Steps
-1. Connect frontend API calls to backend endpoints
-2. Add Stripe test keys to environment
-3. Build chat UI and photo upload screens
-4. Test full payment flow end-to-end
-5. Expand TaskDetail status badge mappings for all TaskStatus values
 
 ## Payment Flow
 1. Poster creates job (≥$7) → status="requested"
@@ -53,20 +47,40 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - Chat expiration: 3 days
 - OTP expiration: 10 minutes
 
-## Environment Variables
-Backend (.env):
-- STRIPE_SECRET_KEY
-- STRIPE_PUBLISHABLE_KEY
-- STRIPE_CONNECT_CLIENT_ID
+## Environment Configuration
+**Critical for Replit deployment:**
+- `EXPO_PUBLIC_API_URL`: Must point to the backend domain (e.g., https://...-00-....replit.dev)
+- Backend runs on port 5000 (Replit's primary exposed port)
+- Frontend (Expo web) runs on port 8081
+- The frontend uses app.json `extra.apiUrl` or `EXPO_PUBLIC_API_URL` environment variable
+
+**Backend Environment:**
+- PORT (5000)
+- STRIPE_SECRET_KEY (via Replit Stripe integration)
+- STRIPE_PUBLISHABLE_KEY 
 - STRIPE_WEBHOOK_SECRET
+- DATABASE_URL (PostgreSQL)
 - PLATFORM_FEE_PERCENT (15)
 - MIN_JOB_PRICE_USD (7)
-- FRONTEND_URL
-- API_BASE_URL
-- PORT (3001)
+
+## API Endpoints
+- POST /api/auth/send-otp - Send OTP to email
+- POST /api/auth/verify-otp - Verify OTP and create/return user
+- GET /api/tasks - List available tasks (with zipCode filtering)
+- POST /api/tasks - Create a new task
+- POST /api/offers - Submit offer on a task
+- POST /api/checkout - Create Stripe Checkout session
+- POST /api/stripe-webhook - Handle Stripe payment events
+- POST /api/chats/:chatId/messages - Send chat message
+- POST /api/tasks/:taskId/complete - Mark task complete with proof
 
 ## Dev Notes
 - OTP codes logged to console as: `[DEV] OTP Code for {email}: {code}`
-- Backend uses mock in-memory DB for MVP
 - All Stripe operations use test mode during development
-- Webhook signature verification required for production
+- For native/Expo Go builds, set EXPO_PUBLIC_API_URL to the backend's public URL
+- The backend must be started separately: `cd backend && node server.js`
+
+## Testing
+- Auth flow tested and working (onboarding → email → OTP → verification)
+- Backend health check returns 200
+- Frontend-backend connectivity verified via automated tests
