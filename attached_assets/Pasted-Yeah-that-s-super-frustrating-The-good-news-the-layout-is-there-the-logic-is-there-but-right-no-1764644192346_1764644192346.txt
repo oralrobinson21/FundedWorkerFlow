@@ -1,0 +1,198 @@
+Yeah, that’s super frustrating. The good news: the layout is there, the logic is there, but right now a bunch of your UI is basically just pixels – the buttons aren’t wired to do anything yet.
+
+Based on everything your other bot said, you’re at this stage:
+
+“UI foundation ready, endpoints exist, but the actual onPress hooks and cancel/logout helpers still need to be wired.”
+
+Let’s fix that in three spots:
+
+⸻
+
+1. Make the Profile screen buttons actually do things
+
+Open your ProfileScreen (or whatever it’s called) and make sure it looks something like this:
+
+import React from 'react';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useAppContext } from '../context/AppContext'; // adjust path
+
+export const ProfileScreen = () => {
+  const navigation = useNavigation();
+  const { user, setUserMode, logout } = useAppContext();
+
+  const handleSwitchToHelper = () => {
+    setUserMode('helper');
+    // send them to helper home / jobs
+    navigation.navigate('Home'); // or 'HelperHome' if you have that
+  };
+
+  const handlePaymentMethods = () => {
+    // if not built yet, at least show *something*
+    Alert.alert('Coming soon', 'Payment methods setup will be added soon.');
+  };
+
+  const handleHelpSupport = () => {
+    navigation.navigate('HelpSupport'); // make sure this screen exists in your navigator
+  };
+
+  const handlePrivacyPolicy = () => {
+    navigation.navigate('PrivacyPolicy'); // or open a webview
+  };
+
+  const handleLogout = () => {
+    logout();                // clear auth/token in context
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Auth' }], // your login/OTP stack name
+    });
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={{ fontSize: 24, textAlign: 'center', marginVertical: 16 }}>
+        Profile
+      </Text>
+
+      {/* Switch to Helper */}
+      <TouchableOpacity onPress={handleSwitchToHelper}>
+        <Text>Switch to Helper</Text>
+        <Text>Accept jobs and earn money</Text>
+      </TouchableOpacity>
+
+      {/* Payment Methods */}
+      <TouchableOpacity onPress={handlePaymentMethods}>
+        <Text>Payment Methods</Text>
+        <Text>Manage your cards</Text>
+      </TouchableOpacity>
+
+      {/* Notifications (stub) */}
+      <TouchableOpacity onPress={() => Alert.alert('Coming soon')}>
+        <Text>Notifications</Text>
+      </TouchableOpacity>
+
+      {/* Help & Support */}
+      <TouchableOpacity onPress={handleHelpSupport}>
+        <Text>Help & Support</Text>
+      </TouchableOpacity>
+
+      {/* Privacy Policy */}
+      <TouchableOpacity onPress={handlePrivacyPolicy}>
+        <Text>Privacy Policy</Text>
+      </TouchableOpacity>
+
+      {/* Logout */}
+      <TouchableOpacity
+        style={{ marginTop: 'auto', padding: 16, backgroundColor: 'red' }}
+        onPress={handleLogout}
+      >
+        <Text style={{ color: 'white', textAlign: 'center' }}>Log Out</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+Key points:
+	•	Every row uses onPress={...}.
+	•	Switch to Helper calls setUserMode('helper') and navigates.
+	•	Log Out calls logout() from your context and resets navigation to the auth stack.
+
+Right now, those profile rows are almost certainly just styled views or list items with no onPress.
+
+⸻
+
+2. Make cancel request work on the Job Detail screen
+
+Open your JobDetailScreen and add a real cancel action.
+
+Assuming useAppContext() exposes cancelTask and you already have the task loaded:
+
+import { Alert, TouchableOpacity, Text } from 'react-native';
+import { useAppContext } from '../context/AppContext';
+
+export const JobDetailScreen = ({ route }) => {
+  const { taskId } = route.params;
+  const { tasks, user, cancelTask } = useAppContext();
+
+  const task = tasks.find(t => t.id === taskId);
+
+  const canCancel =
+    task &&
+    (task.status === 'requested' || task.status === 'accepted') &&
+    task.posterId === user.id;
+
+  const handleCancel = async () => {
+    Alert.alert(
+      'Cancel job',
+      'Are you sure you want to cancel this job?',
+      [
+        { text: 'No' },
+        {
+          text: 'Yes, cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelTask(task.id);
+            } catch (e) {
+              Alert.alert('Error', 'Could not cancel job. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <>
+      {/* ... existing job details ... */}
+
+      {canCancel && (
+        <TouchableOpacity
+          style={{ marginTop: 16, padding: 12, backgroundColor: 'red', borderRadius: 8 }}
+          onPress={handleCancel}
+        >
+          <Text style={{ color: 'white', textAlign: 'center' }}>Cancel Request</Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+};
+
+Make sure your cancelTask in AppContext actually hits the backend /api/tasks/:taskId/cancel and then updates local state.
+
+⸻
+
+3. Double-check nothing is blocking touches
+
+If none of the buttons on that screen work (even after adding onPress):
+	•	Check that your top-level wrapper around ProfileScreen does NOT have something like:
+
+<View pointerEvents="none">
+  {/* whole screen */}
+</View>
+
+or a full-screen overlay view (like a loading spinner) with position: 'absolute' and pointerEvents="auto" that never goes away.
+
+That will eat all touches.
+
+The simplest safe structure is:
+
+return (
+  <View style={{ flex: 1 }}>
+    {/* content, buttons, etc. */}
+  </View>
+);
+
+No transparent overlays on top.
+
+⸻
+
+What I’d do in order
+	1.	Add the onPress handlers on ProfileScreen exactly like above.
+	2.	Add the Cancel Request button in JobDetailScreen.
+	3.	Reload the app and test:
+	•	Can you tap Log Out and get back to login?
+	•	Can you Switch to Helper and see helper views?
+	•	On a job you posted, does Cancel Request change its status / remove it from queue?
+
+If you want, you can paste your actual ProfileScreen or JobDetailScreen code and I’ll rewrite it line-by-line so it definitely works.

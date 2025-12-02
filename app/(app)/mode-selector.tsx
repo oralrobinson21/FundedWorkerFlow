@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useApp } from "@/context/AppContext";
+import Feather from "@expo/vector-icons/Feather";
 
 export default function ModeSelectorScreen() {
   const { setUserMode } = useApp();
@@ -12,8 +13,15 @@ export default function ModeSelectorScreen() {
     router.replace("/(app)/category");
   };
 
+  const handleProfile = () => {
+    router.push("/(app)/profile");
+  };
+
   return (
     <View style={styles.container}>
+      <Pressable style={styles.profileButton} onPress={handleProfile}>
+        <Feather name="settings" size={24} color="#333" />
+      </Pressable>
       <Text style={styles.title}>What would you like to do?</Text>
 
       <Pressable style={styles.card} onPress={() => handleModeSelect("poster")}>
@@ -35,6 +43,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f8f8",
     padding: 20,
     justifyContent: "center",
+  },
+  profileButton: {
+    position: "absolute",
+    top: 16,
+    right: 20,
+    padding: 8,
   },
   title: {
     fontSize: 28,

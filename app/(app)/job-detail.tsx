@@ -2,10 +2,11 @@ import React, { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useApp } from "@/context/AppContext";
+import Feather from "@expo/vector-icons/Feather";
 
 export default function JobDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
-  const { tasks, user, userMode, sendOffer, chooseHelper, jobOffers } = useApp();
+  const { tasks, user, userMode, sendOffer, chooseHelper, jobOffers, cancelTask } = useApp();
   const router = useRouter();
 
   const task = tasks.find((t) => t.id === taskId);
@@ -58,12 +59,42 @@ export default function JobDetailScreen() {
     }
   };
 
+  const handleCancel = () => {
+    Alert.alert("Cancel Job", "Are you sure you want to cancel this job?", [
+      { text: "No" },
+      {
+        text: "Yes, cancel",
+        style: "destructive",
+        onPress: async () => {
+          setLoading(true);
+          try {
+            await cancelTask(taskId || "", "poster");
+            Alert.alert("Success", "Job cancelled");
+            router.back();
+          } catch (err) {
+            Alert.alert("Error", "Failed to cancel job");
+          } finally {
+            setLoading(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const isMyJob = task.posterId === user?.id;
   const canSeeFullAddress = isMyJob || task.helperId === user?.id;
+  const canCancel = isMyJob && (task.status === "requested" || task.status === "accepted");
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>{task.title}</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>{task.title}</Text>
+        {canCancel && (
+          <Pressable onPress={handleCancel} disabled={loading} style={styles.cancelIconButton}>
+            <Feather name="x" size={24} color="#ff4444" />
+          </Pressable>
+        )}
+      </View>
       <View style={styles.priceRow}>
         <Text style={styles.price}>${task.price}</Text>
         <Text style={styles.status}>{task.status}</Text>
@@ -123,11 +154,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f8f8",
     padding: 20,
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     marginTop: 16,
-    marginBottom: 8,
+    flex: 1,
+  },
+  cancelIconButton: {
+    padding: 8,
+    marginTop: 16,
   },
   priceRow: {
     flexDirection: "row",
