@@ -12,6 +12,7 @@ import PaymentScreen from "@/screens/PaymentScreen";
 import CompletionPhotoScreen from "@/screens/CompletionPhotoScreen";
 import ApprovalScreen from "@/screens/ApprovalScreen";
 import RatingScreen from "@/screens/RatingScreen";
+import HelpScreen from "@/screens/HelpScreen";
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
 import { getCommonScreenOptions } from "@/navigation/screenOptions";
@@ -86,6 +87,14 @@ export default function RootNavigator() {
             component={RatingScreen}
             options={{
               animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="Help"
+            component={HelpScreen}
+            options={{
+              presentation: "modal",
+              animation: "slide_from_bottom",
             }}
           />
         </>

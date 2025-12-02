@@ -8,6 +8,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { TaskCard } from "@/components/TaskCard";
 import { ScreenFlatList } from "@/components/ScreenFlatList";
 import Spacer from "@/components/Spacer";
+import { InfoBanner } from "@/components/InfoBanner";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -24,6 +25,7 @@ export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) 
   const { theme } = useTheme();
   const { tasks } = useApp();
   
+  const [showBanner, setShowBanner] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<FilterOption>("All");
   const [zipCodeFilter, setZipCodeFilter] = useState("");
   const [toolsRequiredFilter, setToolsRequiredFilter] = useState<boolean | null>(null);
@@ -109,6 +111,15 @@ export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) 
         ListEmptyComponent={renderEmpty}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
+            {showBanner ? (
+              <InfoBanner 
+                variant="compact" 
+                showDismiss 
+                onDismiss={() => setShowBanner(false)}
+                onLearnMore={() => navigation.navigate("Help")}
+              />
+            ) : null}
+            
             <View style={styles.header}>
               <ThemedText type="h3">Available Jobs</ThemedText>
               <View style={[styles.countBadge, { backgroundColor: theme.funded }]}>

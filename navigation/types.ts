@@ -14,6 +14,7 @@ export type RootStackParamList = {
   CompletionPhoto: { task: Task };
   Approval: { task: Task };
   Rating: { task: Task };
+  Help: undefined;
 };
 
 export type MainTabParamList = {

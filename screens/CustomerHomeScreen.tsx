@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,6 +7,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { TaskCard } from "@/components/TaskCard";
 import { ScreenFlatList } from "@/components/ScreenFlatList";
 import Spacer from "@/components/Spacer";
+import { InfoBanner } from "@/components/InfoBanner";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -20,8 +21,9 @@ type CustomerHomeScreenProps = {
 export default function CustomerHomeScreen({ navigation }: CustomerHomeScreenProps) {
   const { theme } = useTheme();
   const { user, tasks } = useApp();
+  const [showBanner, setShowBanner] = useState(true);
 
-  const myTasks = tasks.filter(task => task.customerId === user?.id);
+  const myTasks = tasks.filter(task => task.posterId === user?.id);
 
   const renderItem = ({ item }: { item: Task }) => (
     <>
@@ -67,14 +69,24 @@ export default function CustomerHomeScreen({ navigation }: CustomerHomeScreenPro
       keyExtractor={(item) => item.id}
       ListEmptyComponent={renderEmpty}
       ListHeaderComponent={
-        myTasks.length > 0 ? (
-          <View style={styles.header}>
-            <ThemedText type="h3">Your Tasks</ThemedText>
-            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              {myTasks.length} task{myTasks.length !== 1 ? "s" : ""}
-            </ThemedText>
-          </View>
-        ) : null
+        <View>
+          {showBanner ? (
+            <InfoBanner 
+              variant="compact" 
+              showDismiss 
+              onDismiss={() => setShowBanner(false)}
+              onLearnMore={() => navigation.navigate("Help")}
+            />
+          ) : null}
+          {myTasks.length > 0 ? (
+            <View style={styles.header}>
+              <ThemedText type="h3">Your Tasks</ThemedText>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                {myTasks.length} task{myTasks.length !== 1 ? "s" : ""}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
       }
     />
   );

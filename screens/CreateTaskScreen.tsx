@@ -10,6 +10,7 @@ import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { PaymentReminderNote } from "@/components/InfoBanner";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -301,6 +302,8 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             Only shown to helper after they accept
           </ThemedText>
         </View>
+
+        <PaymentReminderNote />
 
         <View style={styles.field}>
           <ThemedText type="small" style={styles.label}>Price ($)</ThemedText>
