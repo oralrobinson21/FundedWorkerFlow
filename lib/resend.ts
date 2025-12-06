@@ -5,8 +5,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export const sendTestEmail = async () => {
   try {
     const response = await resend.emails.send({
-      from: 'Your App <you@yourdomain.com>',
-      to: ['youremail@example.com'],
+      from: 'oralrobinson21@outlook.com',
+to: 'oralrobinson21@outlook.com',
       subject: '✅ Resend Test Email',
       html: '<strong>This is working 🎉</strong>',
     });
