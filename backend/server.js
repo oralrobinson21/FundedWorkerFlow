@@ -1178,10 +1178,11 @@ app.get('/api/test-email', async (req, res) => {
   }
 });
 
+
 // Initialize and start server
 async function start() {
   try {
-    // Disabled DB init for now since Postgres is not running
+    // TEMP: Skip DB init to avoid Postgres error
     // await initDatabase();
 
     app.listen(PORT, '0.0.0.0', () => {
