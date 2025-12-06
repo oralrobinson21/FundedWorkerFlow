@@ -1181,15 +1181,16 @@ app.get('/api/test-email', async (req, res) => {
 // Initialize and start server
 async function start() {
   try {
-    await initDatabase();
-    
+    // Disabled DB init for now since Postgres is not running
+    // await initDatabase();
+
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Backend running on http://0.0.0.0:${PORT}`);
+      console.log(`✅ Backend running on http://0.0.0.0:${PORT}`);
       console.log(`Minimum job price: $${process.env.MIN_JOB_PRICE_USD || '7'}`);
       console.log(`Platform fee: ${process.env.PLATFORM_FEE_PERCENT || '15'}%`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 }
