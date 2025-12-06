@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const { pool, initDatabase } = require('./db');
 const { getStripeClient, getStripeSync, getStripePublishableKey } = require('./stripeClient');
+const { sendTestEmail } = require('./lib/resend');
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 5000;
@@ -1165,6 +1166,16 @@ app.get('/health', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/test-email', async (req, res) => {
+  try {
+    const to = req.query.to || 'delivered@resend.dev';
+    const result = await sendTestEmail(to);
+    res.json({ success: true, result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Initialize and start server
