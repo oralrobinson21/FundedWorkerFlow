@@ -1,8 +1,10 @@
 {
   "name": "my-app",
-  "main": "index.js",
   "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
   "scripts": {
+    "build": "npx expo export:web",
     "dev": "EXPO_PACKAGER_PROXY_URL=https://$REPLIT_DEV_DOMAIN REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN npx expo start",
     "start": "npx expo start",
     "android": "npx expo start --android",
@@ -61,6 +63,5 @@
     "eslint-plugin-prettier": "^5.5.4",
     "prettier": "3.6.2",
     "typescript": "~5.9.2"
-  },
-  "private": true
+  }
 }
