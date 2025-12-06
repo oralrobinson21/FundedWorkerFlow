@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, Task, JobOffer, ChatThread, ChatMessage, UserMode, TaskStatus, SupportTicket, generateConfirmationCode, generateOTP } from "@/types";
 import { API_BASE_URL } from "@/utils/api";
+import { isSupabaseAvailable, userQueries, taskQueries } from "@/services/supabase";
 
 interface AppContextType {
   user: User | null;
@@ -589,7 +590,89 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const syncWithSupabase = async () => {
-    // TODO: Implement Supabase sync for new data model
+    // Step 1: Check availability
+    if (!isSupabaseAvailable || !user) return;
+
+    try {
+      // Step 2: Push user profile updates
+      await userQueries.updateUser(user.id, {
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        defaultZipCode: user.defaultZipCode,
+        profilePhotoUrl: user.profilePhotoUrl,
+      });
+
+      // Step 3: Push user's created tasks to Supabase
+      const userTasks = tasks.filter(t => t.posterId === user.id);
+      for (const task of userTasks) {
+        // Map to Supabase format
+        const supabaseTask = {
+          id: task.id,
+          posterId: task.posterId,
+          posterName: task.posterName,
+          title: task.title,
+          description: task.description,
+          category: task.category,
+          price: task.price,
+          zipCode: task.zipCode,
+          areaDescription: task.areaDescription,
+          status: task.status,
+          createdAt: task.createdAt,
+          confirmationCode: task.confirmationCode,
+        };
+        // Try update first, create if doesn't exist
+        const { error } = await taskQueries.updateTask(task.id, supabaseTask);
+        if (error && (error === 'Supabase not available' || (typeof error === 'object' && (error as any).code === 'PGRST116'))) {
+          // Row not found or Supabase not available, try to create
+          await taskQueries.createTask(supabaseTask);
+        }
+      }
+
+      // Step 4: Pull user's own tasks from server (server wins)
+      const { data: remoteTasks } = await taskQueries.getCustomerTasks(user.id);
+      if (remoteTasks && remoteTasks.length > 0) {
+        // Merge: server version replaces local version for user's tasks
+        const remoteTaskIds = new Set(remoteTasks.map((t: any) => t.id));
+        const localOnlyTasks = tasks.filter(t => !remoteTaskIds.has(t.id) && t.posterId !== user.id);
+
+        // Convert remote tasks to local format
+        const mergedTasks = [
+          ...localOnlyTasks,
+          ...remoteTasks.map((t: any) => ({
+            id: t.id,
+            posterId: t.posterId,
+            posterName: t.posterName,
+            title: t.title,
+            description: t.description,
+            category: t.category,
+            price: t.price,
+            zipCode: t.zipCode,
+            areaDescription: t.areaDescription,
+            fullAddress: t.fullAddress,
+            status: t.status,
+            createdAt: t.createdAt,
+            confirmationCode: t.confirmationCode,
+            photosRequired: t.photosRequired ?? false,
+            toolsRequired: t.toolsRequired ?? false,
+            toolsProvided: t.toolsProvided ?? false,
+            photos: t.photos ?? [],
+            helperId: t.helperId,
+            helperName: t.helperName,
+            completedAt: t.completedAt,
+            canceledAt: t.canceledAt,
+            canceledBy: t.canceledBy,
+          }))
+        ];
+
+        setTasks(mergedTasks);
+        await saveTasks(mergedTasks);
+      }
+
+    } catch (error) {
+      console.error("syncWithSupabase error:", error);
+      // Don't throw - maintain graceful fallback
+    }
   };
 
   return (

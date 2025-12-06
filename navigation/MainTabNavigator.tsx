@@ -49,7 +49,8 @@ function CustomerFAB() {
 
 export default function MainTabNavigator() {
   const { theme, isDark } = useTheme();
-  const { isHelperMode } = useApp();
+  const { userMode } = useApp();
+  const isHelperMode = userMode === "helper";
 
   return (
     <View style={styles.container}>
