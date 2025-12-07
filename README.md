@@ -64,6 +64,11 @@ FundedWorkerFlow/
 ├── ecosystem.config.js       # PM2 auto-restart config
 ├── railway.json              # Railway deployment config
 ├── .env                      # Frontend env vars
+├── scripts/
+│   ├── validate-env.js       # Environment validation
+│   ├── test-endpoints.js     # API endpoint testing
+│   ├── health-monitor.js     # Health monitoring
+│   └── deploy-railway.sh     # Railway deployment automation
 ├── backend/
 │   ├── server.full.js        # Production backend (35+ endpoints)
 │   ├── server.js             # Development backend (same)
@@ -266,6 +271,107 @@ Add all variables from `backend/.env.example` to Railway dashboard:
    - URL: `https://your-app.railway.app/api/stripe/webhook`
    - Events: `checkout.session.completed`
 3. Copy webhook secret to Railway env vars
+
+---
+
+## Automation & Testing
+
+The project includes automation scripts for validation, testing, monitoring, and deployment.
+
+### Validate Environment
+
+Check all required environment variables before starting:
+
+```bash
+node scripts/validate-env.js
+```
+
+This checks:
+- Backend `.env` file exists and has valid API keys
+- Frontend `.env` file exists
+- PM2 is installed
+- All required variables are set (not placeholders)
+- Variables match expected format (Stripe keys, URLs, etc.)
+
+**Validation runs automatically** when you use `./master-start.sh`
+
+### Test All Endpoints
+
+Test all 35+ backend endpoints:
+
+```bash
+# Test local backend
+node scripts/test-endpoints.js
+
+# Test remote backend (Railway, etc.)
+node scripts/test-endpoints.js https://your-app.railway.app
+```
+
+Tests include:
+- Health checks (`/health`, `/api/health`)
+- Email test endpoint
+- Stripe configuration
+- Authentication endpoints
+- Task endpoints
+
+### Health Monitoring
+
+Continuous health monitoring with automatic alerts:
+
+```bash
+node scripts/health-monitor.js
+```
+
+Features:
+- Checks backend health every 30 seconds (configurable)
+- Alerts after 3 consecutive failures (configurable)
+- Logs alerts to `logs/health-alerts.log`
+- Displays real-time status in terminal
+
+**Environment variables:**
+```bash
+HEALTH_CHECK_INTERVAL=30000      # Check interval in ms (default: 30s)
+HEALTH_ALERT_THRESHOLD=3         # Failures before alert (default: 3)
+```
+
+**Usage with PM2:**
+```bash
+# Add to ecosystem.config.js for background monitoring
+pm2 start scripts/health-monitor.js --name health-monitor
+```
+
+### Automated Railway Deployment
+
+Deploy to Railway with one command:
+
+```bash
+./scripts/deploy-railway.sh
+```
+
+This script:
+1. Checks Railway CLI is installed
+2. Validates environment variables
+3. Prompts for confirmation
+4. Sets all env vars from `backend/.env` to Railway
+5. Deploys the application
+6. Tests deployment health
+7. Provides deployment URL and next steps
+
+**Prerequisites:**
+- Railway CLI installed: `npm install -g @railway/cli`
+- Railway account (free tier available)
+- backend/.env with production keys
+
+### Automation Scripts Summary
+
+All scripts located in `scripts/` directory:
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `validate-env.js` | Check env vars | Auto-runs in master-start.sh |
+| `test-endpoints.js` | Test all APIs | `node scripts/test-endpoints.js [URL]` |
+| `health-monitor.js` | Monitor uptime | `node scripts/health-monitor.js` |
+| `deploy-railway.sh` | Deploy to Railway | `./scripts/deploy-railway.sh` |
 
 ---
 

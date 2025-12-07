@@ -2,6 +2,17 @@
 
 # FundedWorkerFlow Development Environment Startup Script
 
+# Validate environment variables first
+echo "Validating environment configuration..."
+node scripts/validate-env.js
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Environment validation failed"
+  echo "Fix errors above before starting"
+  exit 1
+fi
+
+echo ""
 echo "========================================"
 echo "Starting FundedWorkerFlow Development Environment..."
 echo "========================================"
