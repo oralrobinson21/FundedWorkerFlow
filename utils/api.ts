@@ -14,10 +14,10 @@ function getApiBaseUrl(): string {
       const backendHost = hostname.replace(/-\d+-/, "-8008-");
       return `https://${backendHost}`;
     }
-    return "http://localhost:5000";
+    return "http://localhost:5001";
   }
-  
-  return "http://localhost:5000";
+
+  return "http://localhost:5001";
 }
 
 export const API_BASE_URL = getApiBaseUrl();
