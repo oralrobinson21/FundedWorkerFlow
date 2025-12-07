@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const { pool, initDatabase } = require('./db');
 const { getStripeClient, getStripePublishableKey } = require('./stripeClient');
-const { sendTestEmail } = require('./lib/resend');
+const { sendTestEmail, sendContactEmail } = require('./lib/resend');
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 5001;
@@ -1177,6 +1177,31 @@ app.get('/api/test-email', async (req, res) => {
     const result = await sendTestEmail(to);
     res.json({ success: true, result });
   } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ⸻ CONTACT FORM ⸻
+app.post('/api/contact', async (req, res) => {
+  try {
+    const { email, message } = req.body;
+
+    if (!email || !message) {
+      return res.status(400).json({ error: 'Email and message required' });
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    const contactEmail = process.env.CONTACT_EMAIL || 'citytask@outlook.com';
+    const result = await sendContactEmail(email, message, contactEmail);
+
+    res.json({ success: true, message: 'Contact form submitted successfully' });
+  } catch (error) {
+    console.error('Contact form error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
