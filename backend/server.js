@@ -3,6 +3,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const { pool, initDatabase } = require('./db');
@@ -10,7 +11,8 @@ const { getStripeClient, getStripePublishableKey } = require('./stripeClient');
 const { sendTestEmail, sendContactEmail } = require('./lib/resend');
 
 const app = express();
-const PORT = process.env.BACKEND_PORT || 5001;
+// Railway uses PORT, fallback to BACKEND_PORT for local dev
+const PORT = process.env.PORT || process.env.BACKEND_PORT || 5001;
 
 // Helper: Generate ID
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -1204,6 +1206,124 @@ app.post('/api/contact', async (req, res) => {
     console.error('Contact form error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// ⸻ SERVE STATIC FRONTEND (if build exists) ⸻
+// Serve static files from web-build directory if it exists
+const webBuildPath = path.join(__dirname, '..', 'web-build');
+const webPath = path.join(__dirname, '..', 'web');
+app.use(express.static(webBuildPath));
+app.use(express.static(webPath));
+
+// ⸻ ROOT ROUTE - API INFO OR FRONTEND ⸻
+app.get('/', (req, res) => {
+  // Try to serve index.html if it exists, otherwise show API info
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>CityTasks API</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .container {
+          max-width: 800px;
+          background: rgba(255,255,255,0.1);
+          backdrop-filter: blur(10px);
+          border-radius: 20px;
+          padding: 40px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 { font-size: 3em; margin-bottom: 10px; }
+        .subtitle { font-size: 1.2em; opacity: 0.9; margin-bottom: 30px; }
+        .status {
+          display: inline-block;
+          background: #00B87C;
+          padding: 8px 16px;
+          border-radius: 20px;
+          font-size: 0.9em;
+          font-weight: 600;
+          margin-bottom: 30px;
+        }
+        .endpoints {
+          background: rgba(0,0,0,0.2);
+          border-radius: 10px;
+          padding: 20px;
+          margin: 20px 0;
+        }
+        .endpoint {
+          margin: 10px 0;
+          padding: 10px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 5px;
+          font-family: 'Courier New', monospace;
+        }
+        .method {
+          display: inline-block;
+          background: #667eea;
+          padding: 3px 8px;
+          border-radius: 3px;
+          font-size: 0.85em;
+          font-weight: 600;
+          margin-right: 10px;
+        }
+        .get { background: #00B87C; }
+        .post { background: #4299e1; }
+        a { color: #fff; text-decoration: none; border-bottom: 2px solid rgba(255,255,255,0.3); }
+        a:hover { border-bottom-color: #fff; }
+        .footer { margin-top: 30px; opacity: 0.8; font-size: 0.9em; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>🚀 CityTasks API</h1>
+        <p class="subtitle">Task Marketplace Platform with Stripe Payments</p>
+        <span class="status">✅ Server Running</span>
+
+        <div class="endpoints">
+          <h2 style="margin-bottom: 15px;">Key Endpoints</h2>
+          <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="/api/health">/api/health</a> - Health check
+          </div>
+          <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="/api/stripe/config">/api/stripe/config</a> - Stripe configuration
+          </div>
+          <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="/api/tasks">/api/tasks</a> - Browse tasks
+          </div>
+          <div class="endpoint">
+            <span class="method post">POST</span>
+            /api/auth/send-otp - Send OTP for login
+          </div>
+          <div class="endpoint">
+            <span class="method post">POST</span>
+            /api/auth/verify-otp - Verify OTP and login
+          </div>
+        </div>
+
+        <div class="footer">
+          <p><strong>Platform Features:</strong></p>
+          <p>✓ OTP Authentication • ✓ Task Creation • ✓ Offer System<br>
+             ✓ Stripe Payments • ✓ Chat Messaging • ✓ Dispute Management</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 
