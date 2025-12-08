@@ -1210,8 +1210,8 @@ app.post('/api/contact', async (req, res) => {
 // Initialize and start server
 async function start() {
   try {
-    // TEMP: Skip DB init to avoid Postgres error
-    // await initDatabase();
+    // Initialize database tables
+    await initDatabase();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ Backend running on http://0.0.0.0:${PORT}`);
