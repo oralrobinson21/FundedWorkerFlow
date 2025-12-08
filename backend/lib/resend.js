@@ -1,6 +1,17 @@
 const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient = null;
+
+function getResendClient() {
+  if (!resendClient) {
+    if (!process.env.RESEND_API_KEY) {
+      console.warn('⚠️  RESEND_API_KEY not configured - email sending disabled');
+      return null;
+    }
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
 
 const DEFAULT_FROM = 'CityTasks <onboarding@resend.dev>';
 
@@ -8,6 +19,8 @@ const DEFAULT_FROM = 'CityTasks <onboarding@resend.dev>';
  * Send a test email
  */
 async function sendTestEmail(to = 'delivered@resend.dev') {
+  const resend = getResendClient();
+  if (!resend) throw new Error('Email service not configured');
   return await resend.emails.send({
     from: DEFAULT_FROM,
     to,
@@ -20,6 +33,8 @@ async function sendTestEmail(to = 'delivered@resend.dev') {
  * Send OTP verification code
  */
 async function sendOTPEmail(to, code) {
+  const resend = getResendClient();
+  if (!resend) throw new Error('Email service not configured');
   return await resend.emails.send({
     from: DEFAULT_FROM,
     to,
@@ -42,6 +57,8 @@ async function sendOTPEmail(to, code) {
  * Send contact form email
  */
 async function sendContactEmail(fromEmail, message, contactEmail) {
+  const resend = getResendClient();
+  if (!resend) throw new Error('Email service not configured');
   return await resend.emails.send({
     from: DEFAULT_FROM,
     to: contactEmail,
@@ -67,6 +84,8 @@ async function sendContactEmail(fromEmail, message, contactEmail) {
  * Generic email sending function
  */
 async function sendEmail({ to, subject, html, text, replyTo }) {
+  const resend = getResendClient();
+  if (!resend) throw new Error('Email service not configured');
   return await resend.emails.send({
     from: DEFAULT_FROM,
     to,
