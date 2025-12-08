@@ -1329,19 +1329,23 @@ app.get('/', (req, res) => {
 
 // Initialize and start server
 async function start() {
+  // Try to initialize database, but don't crash if it fails
   try {
-    // Initialize database tables
     await initDatabase();
-
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✅ Backend running on http://0.0.0.0:${PORT}`);
-      console.log(`Minimum job price: $${process.env.MIN_JOB_PRICE_USD || '7'}`);
-      console.log(`Platform fee: ${process.env.PLATFORM_FEE_PERCENT || '15'}%`);
-    });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
+    console.log('✅ Database initialized successfully');
+  } catch (dbError) {
+    console.warn('⚠️  Database connection failed - app will start without database');
+    console.warn('⚠️  Database error:', dbError.message);
+    console.warn('⚠️  Please set DATABASE_URL environment variable to enable database features');
   }
+
+  // Start server regardless of database status
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Backend running on http://0.0.0.0:${PORT}`);
+    console.log(`🌍 Visit: http://0.0.0.0:${PORT}`);
+    console.log(`Minimum job price: $${process.env.MIN_JOB_PRICE_USD || '7'}`);
+    console.log(`Platform fee: ${process.env.PLATFORM_FEE_PERCENT || '15'}%`);
+  });
 }
 
 start();
