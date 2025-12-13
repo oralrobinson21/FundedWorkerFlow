@@ -1,18 +1,79 @@
-
-
-
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
 const { pool, initDatabase } = require('./db');
-const { getStripeClient, getStripePublishableKey } = require('./stripeClient');
-const { sendTestEmail, sendContactEmail } = require('./lib/resend');
+const { getStripeClient, getStripeSync, getStripePublishableKey } = require('./stripeClient');
+
+// Email configuration - Brevo (primary) with logging
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const EMAIL_CONFIGURED = !!BREVO_API_KEY;
+
+console.log(`[STARTUP] Email configured: ${EMAIL_CONFIGURED ? 'YES (Brevo)' : 'NO'}`);
+if (!EMAIL_CONFIGURED) {
+  console.log('[STARTUP] WARNING: Emails will not be sent - set BREVO_API_KEY in secrets');
+}
+
+// Helper: Send email via Brevo
+async function sendEmail({ to, subject, html, text }) {
+  if (!BREVO_API_KEY) {
+    console.log('[EMAIL] Skipped - no BREVO_API_KEY configured');
+    return { success: false, error: 'Email not configured' };
+  }
+
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': BREVO_API_KEY,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { name: 'CityTasks', email: 'noreply@citytask.app' },
+        to: [{ email: to }],
+        subject: subject,
+        htmlContent: html,
+        textContent: text || subject
+      })
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      console.log(`[EMAIL] Sent to ${to} via Brevo - messageId: ${data.messageId}`);
+      return { success: true, messageId: data.messageId };
+    } else {
+      console.error(`[EMAIL] Brevo error:`, data);
+      return { success: false, error: data.message || 'Brevo API error' };
+    }
+  } catch (error) {
+    console.error('[EMAIL] Failed to send:', error.message);
+    return { success: false, error: error.message };
+  }
+}
 
 const app = express();
-// Railway uses PORT, fallback to BACKEND_PORT for local dev
-const PORT = process.env.PORT || process.env.BACKEND_PORT || 5001;
+const PORT = process.env.PORT || process.env.BACKEND_PORT || 5000;
+
+// CORS: Handle ALL OPTIONS preflight requests FIRST (before any routes)
+// This MUST be the first middleware
+app.use((req, res, next) => {
+  // Set CORS headers for all requests
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Id, x-user-id, Accept, Origin');
+  
+  // Handle preflight OPTIONS request immediately
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
+  next();
+});
 
 // Helper: Generate ID
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -183,8 +244,25 @@ app.post('/api/auth/send-otp', async (req, res) => {
       VALUES ($1, $2, $3)
     `, [email.toLowerCase(), code, expiresAt]);
 
-    // In dev mode, log the code
+    // Always log the code for debugging
     console.log(`[DEV] OTP Code for ${email}: ${code}`);
+
+    // Send email via Brevo
+    await sendEmail({
+      to: email,
+      subject: 'Your CityTasks verification code',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #2563eb;">CityTasks Verification</h2>
+          <p>Your verification code is:</p>
+          <div style="background: #f3f4f6; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+            <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #1f2937;">${code}</span>
+          </div>
+          <p style="color: #6b7280; font-size: 14px;">This code expires in 10 minutes.</p>
+          <p style="color: #6b7280; font-size: 14px;">If you didn't request this code, you can safely ignore this email.</p>
+        </div>
+      `
+    });
 
     res.json({ success: true, message: 'OTP sent' });
   } catch (error) {
@@ -345,13 +423,15 @@ app.post('/api/tasks', async (req, res) => {
     const taskId = generateId();
     const confirmationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
+    const expiresAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    
     await pool.query(`
       INSERT INTO tasks (id, title, description, category, zip_code, area_description, full_address, 
-        price, poster_id, poster_name, poster_email, poster_photo_url, confirmation_code, photos_required, tools_required, tools_provided, task_photo_url, photos)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        price, poster_id, poster_name, poster_email, poster_photo_url, confirmation_code, photos_required, tools_required, tools_provided, task_photo_url, photos, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     `, [taskId, title, description, category, zipCode, areaDescription, fullAddress, 
         price, user.id, user.name || 'Anonymous', user.email, user.profile_photo_url, confirmationCode, 
-        photosRequired || false, toolsRequired || false, toolsProvided || false, taskPhotoUrl, taskPhotos]);
+        photosRequired || false, toolsRequired || false, toolsProvided || false, taskPhotoUrl, taskPhotos, expiresAt]);
 
     await logActivity('task_created', user.id, taskId, null, { title, category, price, photoCount: taskPhotos.length });
 
@@ -366,7 +446,7 @@ app.post('/api/tasks', async (req, res) => {
 // ⸻ GET TASKS (for helpers to discover) ⸻
 app.get('/api/tasks', async (req, res) => {
   try {
-    const { status, zipCode, category, toolsRequired, toolsProvided } = req.query;
+    const { status, zipCode, category, toolsRequired, toolsProvided, includeExpired } = req.query;
     
     let query = 'SELECT * FROM tasks WHERE 1=1';
     const params = [];
@@ -394,8 +474,12 @@ app.get('/api/tasks', async (req, res) => {
     } else if (toolsProvided === 'false') {
       query += ` AND tools_provided = FALSE`;
     }
+    
+    if (includeExpired !== 'true') {
+      query += ` AND (expires_at IS NULL OR expires_at > NOW())`;
+    }
 
-    query += ' ORDER BY created_at DESC';
+    query += ' ORDER BY CASE WHEN category = \'emergency\' THEN 0 ELSE 1 END, created_at DESC';
     
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -423,6 +507,27 @@ app.get('/api/my-jobs', async (req, res) => {
     const user = await getAuthUser(req);
     const result = await pool.query('SELECT * FROM tasks WHERE helper_id = $1 ORDER BY created_at DESC', [user.id]);
     res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ GET TASKS NEEDING PRICE ADJUSTMENT ⸻
+// NOTE: This route MUST be before /api/tasks/:taskId to avoid :taskId matching "needing-price-adjustment"
+app.get('/api/tasks/needing-price-adjustment', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+
+    const result = await pool.query(`
+      SELECT t.* FROM tasks t
+      WHERE t.poster_id = $1
+        AND t.status = 'requested'
+        AND t.price_adjust_prompt_shown = TRUE
+        AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.task_id = t.id)
+    `, [user.id]);
+
+    res.json({ tasks: result.rows });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
@@ -1164,6 +1269,92 @@ app.post('/api/tasks/:taskId/tip', async (req, res) => {
   }
 });
 
+// ⸻ PRICE ADJUSTMENT ⸻
+app.patch('/api/tasks/:taskId/price', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+    const { taskId } = req.params;
+    const { newPrice } = req.body;
+
+    const MIN_PRICE = parseFloat(process.env.MIN_JOB_PRICE_USD) || 7;
+
+    if (!newPrice || newPrice < MIN_PRICE) {
+      return res.status(400).json({ error: `Price must be at least $${MIN_PRICE}` });
+    }
+
+    const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+    const task = taskResult.rows[0];
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    if (task.poster_id !== user.id) {
+      return res.status(403).json({ error: 'Only the poster can adjust the price' });
+    }
+
+    if (task.status !== 'requested') {
+      return res.status(400).json({ error: 'Can only adjust price before a helper is chosen' });
+    }
+
+    const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT) || 15;
+    const newPriceCents = Math.round(newPrice * 100);
+    const platformFee = Math.round(newPriceCents * (PLATFORM_FEE_PERCENT / 100));
+    const helperAmount = newPriceCents - platformFee;
+
+    await pool.query(`
+      UPDATE tasks 
+      SET price = $1, 
+          platform_fee_amount = $2, 
+          helper_amount = $3, 
+          price_adjusted_at = NOW(),
+          price_adjust_prompt_shown = FALSE
+      WHERE id = $4
+    `, [newPrice, platformFee, helperAmount, taskId]);
+
+    await logActivity('price_updated', user.id, taskId, null, { 
+      oldPrice: task.price, 
+      newPrice: newPrice 
+    });
+
+    const updatedResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+
+    res.json({ success: true, task: updatedResult.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/tasks/:taskId/price-adjustment/acknowledge', async (req, res) => {
+  try {
+    const user = await getAuthUser(req);
+    const { taskId } = req.params;
+
+    const taskResult = await pool.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
+    const task = taskResult.rows[0];
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    if (task.poster_id !== user.id) {
+      return res.status(403).json({ error: 'Only the poster can acknowledge this' });
+    }
+
+    await pool.query(`
+      UPDATE tasks SET price_adjust_prompt_shown = FALSE WHERE id = $1
+    `, [taskId]);
+
+    await logActivity('price_prompt_dismissed', user.id, taskId, null, {});
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ⸻ HEALTH CHECK ⸻
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -1173,179 +1364,143 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/test-email', async (req, res) => {
+// ⸻ SCHEDULED JOBS ⸻
+let priceAdjustmentInterval = null;
+
+async function checkTasksForPriceAdjustmentPrompt() {
   try {
-    const to = req.query.to || 'delivered@resend.dev';
-    const result = await sendTestEmail(to);
-    res.json({ success: true, result });
+    const result = await pool.query(`
+      SELECT t.id, t.title, t.poster_id, t.price, t.created_at
+      FROM tasks t
+      WHERE t.status = 'requested'
+        AND t.price_adjust_prompt_shown = FALSE
+        AND t.created_at < NOW() - INTERVAL '24 hours'
+        AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.task_id = t.id)
+    `);
+
+    for (const task of result.rows) {
+      await pool.query(`
+        UPDATE tasks SET price_adjust_prompt_shown = TRUE WHERE id = $1
+      `, [task.id]);
+
+      await logActivity('price_prompt_triggered', task.poster_id, task.id, null, {
+        reason: '24 hours without offers'
+      });
+
+      console.log(`[CRON] Price adjustment prompt triggered for task ${task.id}: ${task.title}`);
+    }
+
+    if (result.rows.length > 0) {
+      console.log(`[CRON] Checked ${result.rows.length} tasks for price adjustment prompt`);
+    }
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('[CRON] Error checking tasks for price adjustment:', error);
   }
+}
+
+function startScheduledJobs() {
+  priceAdjustmentInterval = setInterval(checkTasksForPriceAdjustmentPrompt, 60 * 60 * 1000);
+  console.log('Scheduled jobs started (price adjustment check every hour)');
+  
+  checkTasksForPriceAdjustmentPrompt();
+}
+
+function stopScheduledJobs() {
+  if (priceAdjustmentInterval) {
+    clearInterval(priceAdjustmentInterval);
+    priceAdjustmentInterval = null;
+    console.log('Scheduled jobs stopped');
+  }
+}
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  stopScheduledJobs();
+  process.exit(0);
 });
 
-// ⸻ CONTACT FORM ⸻
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  stopScheduledJobs();
+  process.exit(0);
+});
+
+// Contact form endpoint
 app.post('/api/contact', async (req, res) => {
   try {
-    const { email, message } = req.body;
-
-    if (!email || !message) {
-      return res.status(400).json({ error: 'Email and message required' });
+    const { name, email, subject, message } = req.body;
+    
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: 'Name, email, and message are required' });
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
-    }
+    // Log the contact submission
+    console.log(`[CONTACT] New message from ${name} (${email}): ${subject || 'General Inquiry'}`);
+    console.log(`[CONTACT] Message: ${message}`);
 
-    const contactEmail = process.env.CONTACT_EMAIL || 'citytask@outlook.com';
-    const result = await sendContactEmail(email, message, contactEmail);
+    // Send email via Brevo
+    await sendEmail({
+      to: 'citytask@outlook.com',
+      subject: `[Contact Form] ${subject || 'General Inquiry'} from ${name}`,
+      text: `From: ${name}\nEmail: ${email}\nSubject: ${subject || 'General Inquiry'}\n\nMessage:\n${message}`,
+      html: `
+        <h2>New Contact Form Submission</h2>
+        <p><strong>From:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Subject:</strong> ${subject || 'General Inquiry'}</p>
+        <hr>
+        <p><strong>Message:</strong></p>
+        <p>${message.replace(/\n/g, '<br>')}</p>
+      `
+    });
 
     res.json({ success: true, message: 'Contact form submitted successfully' });
   } catch (error) {
-    console.error('Contact form error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('[CONTACT] Error:', error);
+    res.status(500).json({ error: 'Failed to submit contact form' });
   }
 });
 
-// ⸻ SERVE STATIC FRONTEND (if build exists) ⸻
-// Serve static files from web-build directory if it exists
-const webBuildPath = path.join(__dirname, '..', 'web-build');
-const webPath = path.join(__dirname, '..', 'web');
-app.use(express.static(webBuildPath));
-app.use(express.static(webPath));
+// Serve static web app (for Railway/production deployment)
+const webDistPath = path.join(__dirname, '..', 'web-dist');
+const fs = require('fs');
 
-// ⸻ ROOT ROUTE - API INFO OR FRONTEND ⸻
-app.get('/', (req, res) => {
-  // Try to serve index.html if it exists, otherwise show API info
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>CityTasks API</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-        }
-        .container {
-          max-width: 800px;
-          background: rgba(255,255,255,0.1);
-          backdrop-filter: blur(10px);
-          border-radius: 20px;
-          padding: 40px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }
-        h1 { font-size: 3em; margin-bottom: 10px; }
-        .subtitle { font-size: 1.2em; opacity: 0.9; margin-bottom: 30px; }
-        .status {
-          display: inline-block;
-          background: #00B87C;
-          padding: 8px 16px;
-          border-radius: 20px;
-          font-size: 0.9em;
-          font-weight: 600;
-          margin-bottom: 30px;
-        }
-        .endpoints {
-          background: rgba(0,0,0,0.2);
-          border-radius: 10px;
-          padding: 20px;
-          margin: 20px 0;
-        }
-        .endpoint {
-          margin: 10px 0;
-          padding: 10px;
-          background: rgba(255,255,255,0.1);
-          border-radius: 5px;
-          font-family: 'Courier New', monospace;
-        }
-        .method {
-          display: inline-block;
-          background: #667eea;
-          padding: 3px 8px;
-          border-radius: 3px;
-          font-size: 0.85em;
-          font-weight: 600;
-          margin-right: 10px;
-        }
-        .get { background: #00B87C; }
-        .post { background: #4299e1; }
-        a { color: #fff; text-decoration: none; border-bottom: 2px solid rgba(255,255,255,0.3); }
-        a:hover { border-bottom-color: #fff; }
-        .footer { margin-top: 30px; opacity: 0.8; font-size: 0.9em; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <h1>🚀 CityTasks API</h1>
-        <p class="subtitle">Task Marketplace Platform with Stripe Payments</p>
-        <span class="status">✅ Server Running</span>
-
-        <div class="endpoints">
-          <h2 style="margin-bottom: 15px;">Key Endpoints</h2>
-          <div class="endpoint">
-            <span class="method get">GET</span>
-            <a href="/api/health">/api/health</a> - Health check
-          </div>
-          <div class="endpoint">
-            <span class="method get">GET</span>
-            <a href="/api/stripe/config">/api/stripe/config</a> - Stripe configuration
-          </div>
-          <div class="endpoint">
-            <span class="method get">GET</span>
-            <a href="/api/tasks">/api/tasks</a> - Browse tasks
-          </div>
-          <div class="endpoint">
-            <span class="method post">POST</span>
-            /api/auth/send-otp - Send OTP for login
-          </div>
-          <div class="endpoint">
-            <span class="method post">POST</span>
-            /api/auth/verify-otp - Verify OTP and login
-          </div>
-        </div>
-
-        <div class="footer">
-          <p><strong>Platform Features:</strong></p>
-          <p>✓ OTP Authentication • ✓ Task Creation • ✓ Offer System<br>
-             ✓ Stripe Payments • ✓ Chat Messaging • ✓ Dispute Management</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `);
-});
-
+if (fs.existsSync(webDistPath)) {
+  console.log('Serving static web app from:', webDistPath);
+  
+  app.use(express.static(webDistPath));
+  
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    if (req.method === 'GET') {
+      res.sendFile(path.join(webDistPath, 'index.html'));
+    } else {
+      next();
+    }
+  });
+}
 
 // Initialize and start server
 async function start() {
-  // Try to initialize database, but don't crash if it fails
   try {
     await initDatabase();
-    console.log('✅ Database initialized successfully');
-  } catch (dbError) {
-    console.warn('⚠️  Database connection failed - app will start without database');
-    console.warn('⚠️  Database error:', dbError.message);
-    console.warn('⚠️  Please set DATABASE_URL environment variable to enable database features');
+    
+    startScheduledJobs();
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Backend running on http://0.0.0.0:${PORT}`);
+      console.log(`Minimum job price: $${process.env.MIN_JOB_PRICE_USD || '7'}`);
+      console.log(`Platform fee: ${process.env.PLATFORM_FEE_PERCENT || '15'}%`);
+      if (fs.existsSync(webDistPath)) {
+        console.log(`Web app: Serving from ${webDistPath}`);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
   }
-
-  // Start server regardless of database status
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Backend running on http://0.0.0.0:${PORT}`);
-    console.log(`🌍 Visit: http://0.0.0.0:${PORT}`);
-    console.log(`Minimum job price: $${process.env.MIN_JOB_PRICE_USD || '7'}`);
-    console.log(`Platform fee: ${process.env.PLATFORM_FEE_PERCENT || '15'}%`);
-  });
 }
 
 start();

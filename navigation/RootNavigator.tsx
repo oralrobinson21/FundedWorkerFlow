@@ -2,9 +2,13 @@ import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import MainTabNavigator from "@/navigation/MainTabNavigator";
+import LandingScreen from "@/screens/LandingScreen";
+import InvestorsScreen from "@/screens/InvestorsScreen";
+import ContactScreen from "@/screens/ContactScreen";
 import OnboardingScreen from "@/screens/OnboardingScreen";
 import LoginScreen from "@/screens/LoginScreen";
 import VerifyScreen from "@/screens/VerifyScreen";
+import CompleteProfileScreen from "@/screens/CompleteProfileScreen";
 import CreateTaskScreen from "@/screens/CreateTaskScreen";
 import TaskDetailScreen from "@/screens/TaskDetailScreen";
 import ChatScreen from "@/screens/ChatScreen";
@@ -13,6 +17,9 @@ import CompletionPhotoScreen from "@/screens/CompletionPhotoScreen";
 import ApprovalScreen from "@/screens/ApprovalScreen";
 import RatingScreen from "@/screens/RatingScreen";
 import HelpScreen from "@/screens/HelpScreen";
+import ApplicantsScreen from "@/screens/ApplicantsScreen";
+import VerifyPhoneScreen from "@/screens/VerifyPhoneScreen";
+import SupportScreen from "@/screens/SupportScreen";
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/context/AppContext";
 import { getCommonScreenOptions } from "@/navigation/screenOptions";
@@ -38,6 +45,13 @@ export default function RootNavigator() {
       {user ? (
         <>
           <Stack.Screen name="Main" component={MainTabNavigator} />
+          <Stack.Screen
+            name="CompleteProfile"
+            component={CompleteProfileScreen}
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
           <Stack.Screen
             name="CreateTask"
             component={CreateTaskScreen}
@@ -97,14 +111,59 @@ export default function RootNavigator() {
               animation: "slide_from_bottom",
             }}
           />
+          <Stack.Screen
+            name="Applicants"
+            component={ApplicantsScreen}
+            options={{
+              animation: "slide_from_right",
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="VerifyPhone"
+            component={VerifyPhoneScreen}
+            options={{
+              animation: "slide_from_right",
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="Support"
+            component={SupportScreen}
+            options={{
+              animation: "slide_from_right",
+              headerShown: false,
+            }}
+          />
         </>
       ) : (
         <>
           <Stack.Screen
+            name="Landing"
+            component={LandingScreen}
+            options={{
+              animation: "fade",
+            }}
+          />
+          <Stack.Screen
+            name="Investors"
+            component={InvestorsScreen}
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
+            name="Contact"
+            component={ContactScreen}
+            options={{
+              animation: "slide_from_right",
+            }}
+          />
+          <Stack.Screen
             name="Onboarding"
             component={OnboardingScreen}
             options={{
-              animation: "fade",
+              animation: "slide_from_right",
             }}
           />
           <Stack.Screen

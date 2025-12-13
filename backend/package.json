@@ -2,10 +2,10 @@
   "name": "citytasks-backend",
   "version": "1.0.0",
   "description": "CityTasks backend API with Stripe Connect",
-  "main": "server.full.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.full.js",
-    "dev": "nodemon server.full.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [],
   "author": "",
@@ -17,8 +17,5 @@
     "dotenv": "^16.3.1",
     "body-parser": "^1.20.2",
     "uuid": "^9.0.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
   }
 }

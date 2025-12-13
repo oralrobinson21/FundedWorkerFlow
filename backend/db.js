@@ -154,6 +154,8 @@ async function initDatabase() {
         BEGIN ALTER TABLE tasks ADD COLUMN dispute_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN disputed_at TIMESTAMP; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN disputed_by TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN price_adjust_prompt_shown BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE tasks ADD COLUMN price_adjusted_at TIMESTAMP; EXCEPTION WHEN duplicate_column THEN NULL; END;
       END $$;
     `);
     console.log('Database tables initialized');

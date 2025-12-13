@@ -1,10 +1,14 @@
 import { Task } from "@/types";
 
 export type RootStackParamList = {
+  Landing: undefined;
+  Investors: undefined;
+  Contact: undefined;
   Main: undefined;
   Onboarding: undefined;
   Login: undefined;
   Verify: { email: string };
+  CompleteProfile: undefined;
   Phone: undefined;
   ModeSelector: undefined;
   CreateTask: undefined;
@@ -15,6 +19,9 @@ export type RootStackParamList = {
   Approval: { task: Task };
   Rating: { task: Task };
   Help: undefined;
+  Applicants: { task: Task };
+  VerifyPhone: undefined;
+  Support: undefined;
 };
 
 export type MainTabParamList = {

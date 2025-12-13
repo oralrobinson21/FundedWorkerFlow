@@ -10,9 +10,11 @@ import Animated, {
 
 import { ThemedText } from "@/components/ThemedText";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EmergencyBadge, EmergencyTimeBadge } from "@/components/EmergencyBadge";
+import { ExpirationBadge } from "@/components/ExpirationBadge";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { Task } from "@/types";
+import { Task, getCategoryLabel } from "@/types";
 
 interface TaskCardProps {
   task: Task;
@@ -58,28 +60,38 @@ export function TaskCard({ task, isCustomerView, onPress }: TaskCardProps) {
       ]}
     >
       <View style={styles.header}>
-        <ThemedText type="h4" style={styles.title} numberOfLines={1}>
-          {task.title}
-        </ThemedText>
+        <View style={styles.titleRow}>
+          <ThemedText type="h4" style={styles.title} numberOfLines={1}>
+            {task.title}
+          </ThemedText>
+          {task.isEmergency ? <EmergencyBadge size="small" /> : null}
+        </View>
         <StatusBadge status={task.status} />
       </View>
 
       <View style={styles.metaRow}>
         <Feather name="map-pin" size={14} color={theme.textSecondary} />
-        <ThemedText type="caption" style={{ color: theme.textSecondary }} numberOfLines={1}>
-          {task.areaDescription || task.neighborhood}
+        <ThemedText type="caption" style={{ color: theme.textSecondary, flex: 1 }} numberOfLines={1}>
+          {task.areaDescription || task.zipCode}
         </ThemedText>
+        <ExpirationBadge task={task} compact />
       </View>
 
       <View style={styles.priceRow}>
-        <ThemedText type="h3" style={{ color: theme.primary }}>
+        <ThemedText type="h3" style={{ color: task.isEmergency ? theme.error : theme.primary }}>
           ${task.price.toFixed(0)}
         </ThemedText>
-        <View style={styles.timeRow}>
-          <Feather name="clock" size={14} color={theme.textSecondary} />
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {task.timeWindow}
-          </ThemedText>
+        <View style={styles.categoryRow}>
+          {task.isEmergency ? (
+            <EmergencyTimeBadge />
+          ) : (
+            <>
+              <Feather name="tag" size={14} color={theme.textSecondary} />
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                {getCategoryLabel(task.category)}
+              </ThemedText>
+            </>
+          )}
         </View>
       </View>
 
@@ -100,11 +112,11 @@ export function TaskCard({ task, isCustomerView, onPress }: TaskCardProps) {
         </View>
       ) : null}
 
-      {task.status === "assigned" && task.workerName ? (
+      {task.status === "assigned" && task.helperName ? (
         <View style={[styles.assignedIndicator, { backgroundColor: theme.assigned }]}>
           <Feather name="user" size={14} color={theme.assignedText} />
           <ThemedText type="caption" style={{ color: theme.assignedText }}>
-            {isCustomerView ? `Helper: ${task.workerName}` : "You accepted this job"}
+            {isCustomerView ? `Helper: ${task.helperName}` : "You accepted this job"}
           </ThemedText>
         </View>
       ) : null}
@@ -124,6 +136,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
     gap: Spacing.sm,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: Spacing.sm,
+  },
   title: {
     flex: 1,
   },
@@ -139,7 +157,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: Spacing.sm,
   },
-  timeRow: {
+  categoryRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.xs,
