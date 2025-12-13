@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
-import { View, StyleSheet, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform } from "react-native";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { View, StyleSheet, TextInput, Pressable, FlatList, KeyboardAvoidingView, Platform, Linking } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,11 +7,13 @@ import { RouteProp } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { ChatSafetyNotice } from "@/components/SafetyBanner";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { MessagesStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { ChatMessage } from "@/types";
+import { ChatMessage, Task } from "@/types";
 
 type ChatScreenProps = {
   navigation: NativeStackNavigationProp<MessagesStackParamList, "Chat">;
@@ -27,13 +29,25 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
   const { threadId, taskId, otherUserName } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, chatMessages, sendChatMessage } = useApp();
+  const { user, chatMessages, sendChatMessage, tasks } = useApp();
 
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
   
   // Get messages for this thread
   const messages = threadId ? (chatMessages[threadId] || []) : [];
+
+  // Get the task to check if helper is hired - guard against undefined tasks
+  const task = useMemo(() => (tasks || []).find((t: Task) => t.id === taskId), [tasks, taskId]);
+  
+  // Phone visibility: only show after hire (helper has been selected and payment made)
+  // Includes: assigned, accepted, in_progress, worker_marked_done, completed, disputed
+  const isHired = task && ["assigned", "accepted", "in_progress", "worker_marked_done", "completed", "disputed"].includes(task.status);
+  const isUserPoster = task && user && task.posterId === user.id;
+  
+  // Get the other party's phone info based on user role
+  const otherUserPhone = isUserPoster ? task?.helperPhone : task?.posterPhone;
+  const otherUserPhoneVerified = isUserPoster ? task?.helperPhoneVerified : task?.posterPhoneVerified;
 
   useEffect(() => {
     navigation.setOptions({
@@ -132,6 +146,44 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
         <View style={styles.headerButton} />
       </View>
 
+      {/* Phone Contact Info Card */}
+      <View style={[styles.phoneInfoCard, { backgroundColor: theme.backgroundDefault }]}>
+        {isHired ? (
+          otherUserPhone ? (
+            <Pressable
+              onPress={() => {
+                try {
+                  Linking.openURL(`tel:${otherUserPhone}`);
+                } catch (error) {
+                  console.log("Cannot make call");
+                }
+              }}
+              style={({ pressed }) => [styles.phoneRow, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Feather name="phone" size={16} color={theme.primary} />
+              <ThemedText type="body" style={{ color: theme.primary, marginLeft: Spacing.sm }}>
+                {otherUserPhone}
+              </ThemedText>
+              {otherUserPhoneVerified ? <VerifiedBadge size="small" style={{ marginLeft: Spacing.sm }} /> : null}
+            </Pressable>
+          ) : (
+            <View style={styles.phoneRow}>
+              <Feather name="phone-off" size={16} color={theme.textSecondary} />
+              <ThemedText type="small" style={{ color: theme.textSecondary, marginLeft: Spacing.sm }}>
+                {otherUserName} hasn't added a phone number yet
+              </ThemedText>
+            </View>
+          )
+        ) : (
+          <View style={styles.phoneRow}>
+            <Feather name="lock" size={16} color={theme.textSecondary} />
+            <ThemedText type="small" style={{ color: theme.textSecondary, marginLeft: Spacing.sm, flex: 1 }}>
+              Phone numbers are shared after the helper is hired for safety
+            </ThemedText>
+          </View>
+        )}
+      </View>
+
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -146,6 +198,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
             styles.messagesList,
             messages.length === 0 && styles.emptyList,
           ]}
+          ListHeaderComponent={<ChatSafetyNotice />}
           ListEmptyComponent={renderEmpty}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
@@ -201,6 +254,16 @@ const styles = StyleSheet.create({
   },
   headerCenter: {
     flex: 1,
+    alignItems: "center",
+  },
+  phoneInfoCard: {
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  phoneRow: {
+    flexDirection: "row",
     alignItems: "center",
   },
   keyboardView: {

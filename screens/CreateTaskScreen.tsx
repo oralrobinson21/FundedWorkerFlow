@@ -11,11 +11,15 @@ import * as ImagePicker from "expo-image-picker";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { PaymentReminderNote } from "@/components/InfoBanner";
+import { SafetyBanner } from "@/components/SafetyBanner";
+import { RegionNotice } from "@/components/RegionNotice";
+import { WaiverCheckbox } from "@/components/LiabilityWaiver";
+import { LowPayWarning } from "@/components/LowPayWarning";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { NEIGHBORHOODS, CATEGORIES, TaskCategory } from "@/types";
+import { NEIGHBORHOODS, CATEGORIES, TaskCategoryId, CategoryInfo, CATEGORY_MAP, EMERGENCY_MIN_PRICE, MIN_JOB_PRICE, PHONE_VERIFICATION_THRESHOLD } from "@/types";
 
 const MAX_PHOTOS = 10;
 
@@ -32,7 +36,7 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<TaskCategory>("Other");
+  const [category, setCategory] = useState<TaskCategoryId>("other");
   const [neighborhood, setNeighborhood] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [areaDescription, setAreaDescription] = useState("");
@@ -41,12 +45,20 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
   const [photosRequired, setPhotosRequired] = useState(false);
   const [toolsRequired, setToolsRequired] = useState(false);
   const [toolsProvided, setToolsProvided] = useState(false);
+  const [licenseRequired, setLicenseRequired] = useState(false);
+  const [waiverAccepted, setWaiverAccepted] = useState(false);
   const [showNeighborhoodPicker, setShowNeighborhoodPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
 
-  const isValid = title.trim() && description.trim() && category && zipCode.trim() && areaDescription.trim() && fullAddress.trim() && parseFloat(price) >= 7;
+  const selectedCategoryInfo = CATEGORY_MAP[category];
+  const isEmergencyCategory = category === "emergency";
+  const minPrice = isEmergencyCategory ? EMERGENCY_MIN_PRICE : MIN_JOB_PRICE;
+  const currentPrice = parseFloat(price) || 0;
+  const isPriceValid = currentPrice >= minPrice;
+  
+  const isValid = title.trim() && description.trim() && category && zipCode.trim() && areaDescription.trim() && fullAddress.trim() && isPriceValid && waiverAccepted;
 
   const pickImage = async (useCamera: boolean) => {
     if (photos.length >= MAX_PHOTOS) {
@@ -140,9 +152,24 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
       return;
     }
     
+    if (currentPrice >= PHONE_VERIFICATION_THRESHOLD && !user?.isPhoneVerified) {
+      Alert.alert(
+        "Phone Verification Required",
+        `Tasks priced at $${PHONE_VERIFICATION_THRESHOLD} or more require a verified phone number for your safety.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Verify Phone", 
+            onPress: () => navigation.navigate("Profile" as any)
+          },
+        ]
+      );
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
-      const task = await createTask({
+      await createTask({
         title: title.trim(),
         description: description.trim(),
         category,
@@ -153,11 +180,27 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
         photosRequired,
         toolsRequired,
         toolsProvided,
+        licenseRequired,
         photos,
+        isEmergency: isEmergencyCategory,
       });
-      navigation.replace("Payment", { task });
-    } catch (error) {
-      Alert.alert("Error", "Failed to create task. Please try again.");
+      Alert.alert(
+        "Task Posted",
+        "Your task has been posted! Helpers in your area can now see and send offers.",
+        [
+          {
+            text: "View My Tasks",
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Main" }],
+              });
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to create task. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -304,6 +347,7 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
         </View>
 
         <PaymentReminderNote />
+        <SafetyBanner variant="task" />
 
         <View style={styles.field}>
           <ThemedText type="small" style={styles.label}>Price ($)</ThemedText>
@@ -317,9 +361,15 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
               maxLength={6}
             />
           </View>
-          <ThemedText type="caption" style={[styles.hint, { color: theme.textSecondary }]}>
-            Minimum $7. A 15% platform fee will be applied.
+          <ThemedText type="caption" style={[styles.hint, { color: isEmergencyCategory && !isPriceValid ? theme.error : theme.textSecondary }]}>
+            {isEmergencyCategory 
+              ? `Emergency minimum: $${EMERGENCY_MIN_PRICE}. A 15% platform fee will be applied.`
+              : `Minimum $${MIN_JOB_PRICE}. A 15% platform fee will be applied.`}
           </ThemedText>
+          <ThemedText type="caption" style={[styles.hint, { color: theme.textSecondary, marginTop: Spacing.xs }]}>
+            If no one applies within 24 hours, you can adjust your price anytime.
+          </ThemedText>
+          <LowPayWarning price={currentPrice} isEmergency={isEmergencyCategory} />
         </View>
 
         <View style={styles.field}>
@@ -328,11 +378,29 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             onPress={() => setShowCategoryPicker(true)}
             style={[inputStyle, styles.picker]}
           >
-            <ThemedText type="body" style={styles.pickerText}>
-              {category}
-            </ThemedText>
+            <View style={styles.categoryDisplay}>
+              {isEmergencyCategory ? (
+                <View style={[styles.emergencyBadge, { backgroundColor: theme.error }]}>
+                  <Feather name="alert-circle" size={14} color="#FFFFFF" />
+                </View>
+              ) : null}
+              <ThemedText 
+                type="body" 
+                style={[styles.pickerText, isEmergencyCategory && { color: theme.error, fontWeight: "600" }]}
+              >
+                {selectedCategoryInfo?.label || "Select Category"}
+              </ThemedText>
+            </View>
             <Feather name="chevron-down" size={20} color={theme.textSecondary} />
           </Pressable>
+          {isEmergencyCategory ? (
+            <View style={[styles.emergencyWarning, { backgroundColor: theme.error + "15", borderColor: theme.error + "30" }]}>
+              <Feather name="clock" size={16} color={theme.error} />
+              <ThemedText type="caption" style={{ color: theme.error, flex: 1, marginLeft: Spacing.sm }}>
+                Emergency tasks are expected to be handled within 3 hours and have a ${EMERGENCY_MIN_PRICE} minimum.
+              </ThemedText>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.field}>
@@ -346,6 +414,7 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             keyboardType="number-pad"
             maxLength={10}
           />
+          <RegionNotice variant="inline" />
         </View>
 
         <View style={styles.field}>
@@ -383,6 +452,34 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
             <ThemedText type="body">Require completion photo</ThemedText>
           </Pressable>
         </View>
+
+        <View style={styles.field}>
+          <Pressable
+            onPress={() => setLicenseRequired(!licenseRequired)}
+            style={styles.checkboxRow}
+          >
+            <View style={[styles.checkbox, { borderColor: theme.border, backgroundColor: licenseRequired ? theme.secondary : 'transparent' }]}>
+              {licenseRequired ? <Feather name="check" size={14} color="#FFFFFF" /> : null}
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="body">License or certification required</ThemedText>
+              <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                Only helpers with uploaded licenses can apply
+              </ThemedText>
+            </View>
+          </Pressable>
+        </View>
+
+        <View style={[styles.waiverSection, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <ThemedText type="caption" style={{ fontWeight: "600", marginBottom: Spacing.xs }}>
+            Liability Agreement
+          </ThemedText>
+          <WaiverCheckbox
+            checked={waiverAccepted}
+            onToggle={() => setWaiverAccepted(!waiverAccepted)}
+            variant="poster"
+          />
+        </View>
       </ScrollComponent>
 
       <Modal
@@ -400,27 +497,53 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
               </Pressable>
             </View>
             <ScrollView style={styles.neighborhoodList}>
-              {CATEGORIES.map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => {
-                    setCategory(item);
-                    setShowCategoryPicker(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.neighborhoodItem,
-                    { 
-                      backgroundColor: item === category ? `${theme.primary}20` : (pressed ? theme.backgroundSecondary : 'transparent'),
-                      borderColor: item === category ? theme.primary : 'transparent',
-                    }
-                  ]}
-                >
-                  <ThemedText type="body" style={{ fontWeight: item === category ? '600' : '400' }}>
-                    {item}
-                  </ThemedText>
-                  {item === category ? <Feather name="check" size={18} color={theme.primary} /> : null}
-                </Pressable>
-              ))}
+              {CATEGORIES.map((catInfo) => {
+                const isSelected = catInfo.id === category;
+                const isEmergency = catInfo.isEmergency;
+                return (
+                  <Pressable
+                    key={catInfo.id}
+                    onPress={() => {
+                      setCategory(catInfo.id);
+                      if (catInfo.minPrice && parseFloat(price) < catInfo.minPrice) {
+                        setPrice(catInfo.minPrice.toString());
+                      }
+                      setShowCategoryPicker(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.neighborhoodItem,
+                      { 
+                        backgroundColor: isSelected ? `${theme.primary}20` : (pressed ? theme.backgroundSecondary : 'transparent'),
+                        borderColor: isSelected ? theme.primary : 'transparent',
+                      }
+                    ]}
+                  >
+                    <View style={styles.categoryRowContent}>
+                      <Feather 
+                        name={catInfo.icon as any} 
+                        size={18} 
+                        color={isEmergency ? theme.error : (isSelected ? theme.primary : theme.textSecondary)} 
+                      />
+                      <ThemedText 
+                        type="body" 
+                        style={{ 
+                          fontWeight: isSelected ? '600' : '400',
+                          color: isEmergency ? theme.error : theme.text,
+                          marginLeft: Spacing.md,
+                        }}
+                      >
+                        {catInfo.label}
+                      </ThemedText>
+                      {isEmergency ? (
+                        <View style={[styles.urgencyBadge, { backgroundColor: theme.error + "20" }]}>
+                          <ThemedText type="caption" style={{ color: theme.error, fontWeight: "600" }}>3-HOUR</ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
+                    {isSelected ? <Feather name="check" size={18} color={theme.primary} /> : null}
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -653,5 +776,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing.xs,
+  },
+  categoryDisplay: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: Spacing.sm,
+  },
+  emergencyBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emergencyWarning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.sm,
+  },
+  categoryRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  urgencyBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+    marginLeft: Spacing.sm,
+  },
+  waiverSection: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.md,
   },
 });

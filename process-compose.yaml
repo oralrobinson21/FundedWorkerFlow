@@ -1,0 +1,8 @@
+version: "0.5"
+
+processes:
+  backend:
+    command: PORT=8081 node backend/server.js
+    working_dir: .
+    ready_log_line: "Backend running on http://0.0.0.0:8081"
+    depends_on: {}

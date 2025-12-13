@@ -9,21 +9,27 @@ import { TaskCard } from "@/components/TaskCard";
 import { ScreenFlatList } from "@/components/ScreenFlatList";
 import Spacer from "@/components/Spacer";
 import { InfoBanner } from "@/components/InfoBanner";
+import { EarlyAccessBanner } from "@/components/EarlyAccessBanner";
+import { RegionNotice } from "@/components/RegionNotice";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { Task, TaskCategory, CATEGORIES } from "@/types";
+import { Task, TaskCategoryId, CATEGORIES, CategoryInfo, getCategoryLabel, CATEGORY_MAP } from "@/types";
 
 type WorkerHomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 };
 
-type FilterOption = "All" | TaskCategory;
+type FilterOption = "All" | TaskCategoryId;
 
 export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) {
   const { theme } = useTheme();
-  const { tasks } = useApp();
+  const { tasks, canAcceptMoreJobs, getActiveJobsCount, getMaxActiveJobs } = useApp();
+  
+  const activeJobsCount = getActiveJobsCount();
+  const maxActiveJobs = getMaxActiveJobs();
+  const canTakeMoreJobs = canAcceptMoreJobs();
   
   const [showBanner, setShowBanner] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<FilterOption>("All");
@@ -100,7 +106,7 @@ export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) 
     </View>
   );
 
-  const categoryOptions: FilterOption[] = ["All", ...CATEGORIES];
+  const categoryOptions: FilterOption[] = ["All", ...CATEGORIES.map(c => c.id)];
 
   return (
     <>
@@ -111,6 +117,10 @@ export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) 
         ListEmptyComponent={renderEmpty}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
+            <EarlyAccessBanner onLearnMore={() => navigation.navigate("Help")} />
+            
+            <RegionNotice />
+            
             {showBanner ? (
               <InfoBanner 
                 variant="compact" 
@@ -119,6 +129,35 @@ export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) 
                 onLearnMore={() => navigation.navigate("Help")}
               />
             ) : null}
+
+            <View style={[
+              styles.jobStatusCard, 
+              { 
+                backgroundColor: canTakeMoreJobs ? theme.backgroundDefault : theme.error + "15",
+                borderColor: canTakeMoreJobs ? theme.border : theme.error + "40",
+              }
+            ]}>
+              <View style={styles.jobStatusRow}>
+                <Feather 
+                  name={canTakeMoreJobs ? "briefcase" : "alert-circle"} 
+                  size={18} 
+                  color={canTakeMoreJobs ? theme.primary : theme.error} 
+                />
+                <ThemedText type="body" style={{ marginLeft: Spacing.sm, flex: 1 }}>
+                  Active Jobs: {activeJobsCount} / {maxActiveJobs}
+                </ThemedText>
+                {!canTakeMoreJobs ? (
+                  <View style={[styles.limitBadge, { backgroundColor: theme.error }]}>
+                    <ThemedText type="caption" style={{ color: "#FFFFFF", fontWeight: "600" }}>LIMIT</ThemedText>
+                  </View>
+                ) : null}
+              </View>
+              {!canTakeMoreJobs ? (
+                <ThemedText type="caption" style={{ color: theme.error, marginTop: Spacing.xs }}>
+                  Complete current jobs to accept more
+                </ThemedText>
+              ) : null}
+            </View>
             
             <View style={styles.header}>
               <ThemedText type="h3">Available Jobs</ThemedText>
@@ -150,29 +189,39 @@ export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) 
               style={styles.categoryScroll}
               contentContainerStyle={styles.categoryScrollContent}
             >
-              {categoryOptions.map((cat) => (
-                <Pressable
-                  key={cat}
-                  onPress={() => setSelectedCategory(cat)}
-                  style={[
-                    styles.categoryChip,
-                    { 
-                      backgroundColor: selectedCategory === cat ? theme.primary : theme.backgroundDefault,
-                      borderColor: selectedCategory === cat ? theme.primary : theme.border,
-                    }
-                  ]}
-                >
-                  <ThemedText 
-                    type="caption" 
-                    style={{ 
-                      color: selectedCategory === cat ? "#FFFFFF" : theme.text,
-                      fontWeight: selectedCategory === cat ? "600" : "400",
-                    }}
+              {categoryOptions.map((cat) => {
+                const isEmergency = cat !== "All" && CATEGORY_MAP[cat]?.isEmergency;
+                const displayLabel = cat === "All" ? "All" : getCategoryLabel(cat);
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => setSelectedCategory(cat)}
+                    style={[
+                      styles.categoryChip,
+                      { 
+                        backgroundColor: selectedCategory === cat 
+                          ? (isEmergency ? theme.error : theme.primary) 
+                          : theme.backgroundDefault,
+                        borderColor: selectedCategory === cat 
+                          ? (isEmergency ? theme.error : theme.primary) 
+                          : (isEmergency ? theme.error + "40" : theme.border),
+                      }
+                    ]}
                   >
-                    {cat}
-                  </ThemedText>
-                </Pressable>
-              ))}
+                    <ThemedText 
+                      type="caption" 
+                      style={{ 
+                        color: selectedCategory === cat 
+                          ? "#FFFFFF" 
+                          : (isEmergency ? theme.error : theme.text),
+                        fontWeight: selectedCategory === cat ? "600" : (isEmergency ? "600" : "400"),
+                      }}
+                    >
+                      {displayLabel}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </View>
         }
@@ -455,5 +504,20 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
     alignItems: "center",
+  },
+  jobStatusCard: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+  },
+  jobStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  limitBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
   },
 });

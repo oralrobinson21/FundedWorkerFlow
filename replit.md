@@ -20,7 +20,25 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - Screens: LoginScreen, VerifyScreen, OnboardingScreen, CategoryScreen, CreateTaskScreen, JobListScreen, TaskDetailScreen, ProfileScreen, MessagesScreen
 - Full backend API integration with proper URL routing
 
+### ✅ Launch Features (December 2025)
+- 15 job categories including Emergency ($100 min, 3-hour urgency)
+- "We're New" dismissible early access banner
+- Phone verification with blue check badge (VerifiedBadge component)
+- License upload and requirement tracking for skilled jobs
+- Job stacking limits: 2 (new helpers), 3 (20-99 jobs), 5 (100+ jobs)
+- Fraud/safety warnings throughout (SafetyBanner, FraudWarningCard)
+- Liability waivers: poster checkbox on task creation, helper one-time modal
+- Phone visibility only after hire (contact info protected)
+- Support ticket system (SupportScreen)
+- NYC/North NJ regional focus messaging (RegionNotice component)
+- 24-hour price adjustment prompts for tasks without offers
+
 ### ✅ Recent Updates
+- **Marketing Landing Page**: LandingScreen with service explanation, features, categories, and CTA
+- **Investors Page**: InvestorsScreen with metrics, highlights, and business model
+- **Contact Page**: ContactScreen with email (citytask@outlook.com) and contact form
+- **Footer Component**: Shared footer with email and navigation links on all marketing pages
+- **Static Web Export**: Proxy now serves static Expo web build for browser visitors (fixes QR code page issue)
 - **13 Job Categories**: Cleaning & Housekeeping, Moving & Heavy Lifting, Delivery & Pickups, Handyman & Repairs, Yardwork & Outdoors, Errands & Small Tasks, Tech Help, Pet Care, Car Help, Home Organizing, Babysitting & Senior Help, Beauty & Personal Services, Other
 - **Tools Required/Provided**: Boolean fields on tasks for job matching
 - **Profile Photo Requirement**: Enforced in UI and backend before posting tasks or sending offers
@@ -30,6 +48,10 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - **Extra Work / Counter-Offer Flow**: Helpers can request additional payment when job requires more work than described
 - **Tip Function**: Posters can leave tips after job completion (100% goes to helper, no platform fee)
 - **Task Photos**: Posters can upload 0-10 photos when creating tasks to show helpers the job scope
+- **5-Day Task Expiration**: Tasks auto-expire after 5 days; ExpirationBadge shows "X days left" in TaskCard; expired tasks hidden from helpers
+- **Low Pay Warnings**: LowPayWarning component suggests $20+ for normal tasks, $120+ for emergency tasks (minimum $7 enforced)
+- **Phone Verification for $40+**: Tasks priced $40+ require verified phone for both posting (CreateTaskScreen) and accepting (TaskDetailScreen)
+- **Junk Mail Reminder**: VerifyScreen shows hint about checking spam/junk folder for OTP emails
 
 ### ✅ Backend Implementation
 - Express server on port 5000 with all endpoints
@@ -72,7 +94,10 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 
 ## Key Constants
 - Minimum job price: $7
+- Emergency minimum: $100
 - Platform fee: 15% (on job and extra work, NOT on tips)
+- Phone verification threshold: $40+ tasks
+- Task expiration: 5 days from creation
 - Chat expiration: 3 days
 - OTP expiration: 10 minutes
 
@@ -89,8 +114,14 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - STRIPE_PUBLISHABLE_KEY 
 - STRIPE_WEBHOOK_SECRET
 - DATABASE_URL (PostgreSQL)
+- BREVO_API_KEY (email sending via Brevo - 300/day free tier)
 - PLATFORM_FEE_PERCENT (15)
 - MIN_JOB_PRICE_USD (7)
+
+**Email Service:**
+- Uses Brevo (formerly Sendinblue) for transactional emails
+- Sender: noreply@citytask.app (domain must be verified in Brevo)
+- Free tier: 300 emails/day
 
 ## API Endpoints
 - POST /api/auth/send-otp - Send OTP to email
@@ -124,19 +155,53 @@ Marketplace app where posters post job requests for free, helpers send offers wi
 - OTP codes logged to console as: `[DEV] OTP Code for {email}: {code}`
 - All Stripe operations use test mode during development
 - For native/Expo Go builds, set EXPO_PUBLIC_API_URL to the backend's public URL
-- **Backend must be started separately**: `cd backend && node server.js`
-- The backend runs on port 5000, which is mapped to external port 8008 in .replit config
 - Profile photos stored as local URIs (works in Expo Go)
 - Task photos: Multi-selection works best on iOS; on Android/web, users can add photos one at a time by tapping "Add" repeatedly
 
-### Running Locally
-1. Start Expo: `npm run dev` (port 8081)
-2. Start backend: `cd backend && node server.js` (port 5000)
-3. For Expo Go testing, the API calls go directly to the backend on port 5000
-4. For web testing, EXPO_PUBLIC_API_URL should point to the backend's accessible URL
+### Running the Application
 
-## Testing
+**ONE-CLICK STARTUP: Click the Run button or use the workflow.**
+
+The app uses `start-all.sh` which launches process-compose to run the backend:
+- Backend API (port 8081) - Handles auth, database, Stripe, and serves static web app
+
+**Architecture:**
+```
+Browser → Backend (8081) → /api/* → API routes
+                        → /* → Static web app (from web-dist/)
+```
+
+The backend serves both the API and the pre-built static web app directly.
+
+### Port Configuration
+- Backend: Port 8081 (main web access + API)
+
+### API Verification Results (December 2025)
+All endpoints verified functional when backend is running:
+- ✅ Health check: Returns {"status":"ok"} 
+- ✅ OTP send: Generates 6-digit codes (logged to console as [DEV] OTP Code)
+- ✅ OTP verify: Validates codes correctly
+- ✅ Tasks list: Returns tasks from PostgreSQL database
+- ✅ Activity logs: Returns event history
+- ✅ CORS: Preflight returns correct headers (204 with Access-Control-Allow-*)
+- ✅ Database: Connected and responding
+
+### Testing Notes
 - Auth flow tested and working (onboarding → email → OTP → verification)
-- Backend health check returns 200
-- Frontend-backend connectivity verified via automated tests
+- Backend health check returns 200 when running
 - Profile photo enforcement tested in UI
+- Educational InfoBanner components display 15% fee information
+- HelpScreen contains full payment education and legal disclaimers
+- E2E tests require backend running via process-compose (default workflow only starts frontend)
+
+### Key Educational Features
+1. **InfoBanner Component**: Displays payment info on CustomerHomeScreen and WorkerHomeScreen
+2. **HelpScreen**: Comprehensive payment education accessible from both home screens
+3. **Payment Reminder Cards**: Show during task creation and offer submission
+4. **CheckoutExplanation**: Explains payment timing (held until completion)
+
+### Dispute System
+- Full dispute resolution with photo evidence support
+- 7-day window after completion to file disputes
+- Database stores evidence_urls and photos for disputes
+- Activity logging tracks dispute events

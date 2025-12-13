@@ -1,13 +1,18 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { TaskCard } from "@/components/TaskCard";
 import { ScreenFlatList } from "@/components/ScreenFlatList";
 import Spacer from "@/components/Spacer";
 import { InfoBanner } from "@/components/InfoBanner";
+import { EarlyAccessBanner } from "@/components/EarlyAccessBanner";
+import { RegionNotice } from "@/components/RegionNotice";
+import { PriceAdjustmentBanner } from "@/components/PriceAdjustmentBanner";
+import { PriceAdjustmentModal } from "@/components/PriceAdjustmentModal";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -20,10 +25,43 @@ type CustomerHomeScreenProps = {
 
 export default function CustomerHomeScreen({ navigation }: CustomerHomeScreenProps) {
   const { theme } = useTheme();
-  const { user, tasks } = useApp();
+  const { 
+    user, 
+    tasks, 
+    tasksNeedingPriceAdjustment, 
+    fetchTasksNeedingPriceAdjustment,
+    adjustTaskPrice,
+    acknowledgePricePrompt,
+  } = useApp();
   const [showBanner, setShowBanner] = useState(true);
+  const [selectedTaskForPriceAdjust, setSelectedTaskForPriceAdjust] = useState<Task | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTasksNeedingPriceAdjustment();
+    }, [])
+  );
 
   const myTasks = tasks.filter(task => task.posterId === user?.id);
+
+  const handleAdjustPrice = async (newPrice: number) => {
+    if (selectedTaskForPriceAdjust) {
+      try {
+        await adjustTaskPrice(selectedTaskForPriceAdjust.id, newPrice);
+        setSelectedTaskForPriceAdjust(null);
+      } catch (error) {
+        console.error("Failed to adjust price:", error);
+      }
+    }
+  };
+
+  const handleDismissPricePrompt = async (taskId: string) => {
+    try {
+      await acknowledgePricePrompt(taskId);
+    } catch (error) {
+      console.error("Failed to dismiss prompt:", error);
+    }
+  };
 
   const renderItem = ({ item }: { item: Task }) => (
     <>
@@ -63,32 +101,59 @@ export default function CustomerHomeScreen({ navigation }: CustomerHomeScreenPro
   );
 
   return (
-    <ScreenFlatList
-      data={myTasks}
-      renderItem={renderItem}
-      keyExtractor={(item) => item.id}
-      ListEmptyComponent={renderEmpty}
-      ListHeaderComponent={
-        <View>
-          {showBanner ? (
-            <InfoBanner 
-              variant="compact" 
-              showDismiss 
-              onDismiss={() => setShowBanner(false)}
-              onLearnMore={() => navigation.navigate("Help")}
-            />
-          ) : null}
-          {myTasks.length > 0 ? (
-            <View style={styles.header}>
-              <ThemedText type="h3">Your Tasks</ThemedText>
-              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                {myTasks.length} task{myTasks.length !== 1 ? "s" : ""}
-              </ThemedText>
-            </View>
-          ) : null}
-        </View>
-      }
-    />
+    <>
+      <ScreenFlatList
+        data={myTasks}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={renderEmpty}
+        ListHeaderComponent={
+          <View>
+            <EarlyAccessBanner onLearnMore={() => navigation.navigate("Help")} />
+            
+            <RegionNotice />
+            
+            {showBanner ? (
+              <InfoBanner 
+                variant="compact" 
+                showDismiss 
+                onDismiss={() => setShowBanner(false)}
+                onLearnMore={() => navigation.navigate("Help")}
+              />
+            ) : null}
+            
+            {tasksNeedingPriceAdjustment.map((task) => (
+              <PriceAdjustmentBanner
+                key={task.id}
+                task={task}
+                onAdjustPrice={() => setSelectedTaskForPriceAdjust(task)}
+                onDismiss={() => handleDismissPricePrompt(task.id)}
+              />
+            ))}
+            
+            {myTasks.length > 0 ? (
+              <View style={styles.header}>
+                <ThemedText type="h3">Your Tasks</ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  {myTasks.length} task{myTasks.length !== 1 ? "s" : ""}
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
+        }
+      />
+      
+      {selectedTaskForPriceAdjust ? (
+        <PriceAdjustmentModal
+          visible={true}
+          taskTitle={selectedTaskForPriceAdjust.title}
+          currentPrice={selectedTaskForPriceAdjust.price}
+          onAdjustPrice={handleAdjustPrice}
+          onDismiss={() => handleDismissPricePrompt(selectedTaskForPriceAdjust.id)}
+          onClose={() => setSelectedTaskForPriceAdjust(null)}
+        />
+      ) : null}
+    </>
   );
 }
 

@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { RegionNotice } from "@/components/RegionNotice";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -26,8 +27,21 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
     navigation.navigate("Login");
   };
 
+  const handleBackToLanding = () => {
+    navigation.replace("Landing");
+  };
+
   return (
-    <ThemedView style={[styles.container, { paddingTop: insets.top + Spacing["3xl"] }]}>
+    <ThemedView style={[styles.container, { paddingTop: insets.top + Spacing.lg }]}>
+      <Pressable
+        onPress={handleBackToLanding}
+        style={({ pressed }) => [
+          styles.backButton,
+          { opacity: pressed ? 0.7 : 1 },
+        ]}
+      >
+        <Feather name="arrow-left" size={24} color={theme.text} />
+      </Pressable>
       <View style={styles.content}>
         <Image
           source={require("../assets/images/icon.png")}
@@ -42,6 +56,10 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
         <ThemedText type="body" style={[styles.subtitle, { color: theme.textSecondary }]}>
           Get small jobs done. Help your neighbors.
         </ThemedText>
+
+        <View style={styles.regionContainer}>
+          <RegionNotice variant="inline" />
+        </View>
 
         <View style={styles.buttonsContainer}>
           <Pressable
@@ -105,6 +123,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  backButton: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    alignSelf: "flex-start",
+  },
   content: {
     flex: 1,
     alignItems: "center",
@@ -121,7 +144,12 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     textAlign: "center",
-    marginBottom: Spacing["3xl"],
+    marginBottom: Spacing.md,
+  },
+  regionContainer: {
+    marginBottom: Spacing["2xl"],
+    alignSelf: "center",
+    maxWidth: "90%",
   },
   buttonsContainer: {
     width: "100%",

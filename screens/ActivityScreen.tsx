@@ -1,5 +1,5 @@
-import React from "react";
-import { View, StyleSheet, SectionList } from "react-native";
+import React, { useMemo } from "react";
+import { View, StyleSheet, SectionList, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,10 +11,10 @@ import { ThemedView } from "@/components/ThemedView";
 import { TaskCard } from "@/components/TaskCard";
 import Spacer from "@/components/Spacer";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { Task, PLATFORM_FEE_PERCENT } from "@/types";
+import { Task, JobOffer, PLATFORM_FEE_PERCENT } from "@/types";
 
 type ActivityScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -25,46 +25,154 @@ interface Section {
   data: Task[];
 }
 
+interface TaskWithOffers extends Task {
+  offers?: JobOffer[];
+  offerCount?: number;
+}
+
 export default function ActivityScreen({ navigation }: ActivityScreenProps) {
   const { theme } = useTheme();
-  const { user, tasks } = useApp();
-  const insets = useSafeAreaInsets();
+  const { user, tasks, userMode, jobOffers } = useApp();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
 
-  const isWorker = user?.role === "worker";
+  const isHelper = userMode === "helper";
 
-  const relevantTasks = isWorker
-    ? tasks.filter(task => task.workerId === user?.id)
-    : tasks.filter(task => task.customerId === user?.id);
+  const { relevantTasks, appliedTaskIds } = useMemo(() => {
+    const userOffers = jobOffers.filter(o => o.helperId === user?.id);
+    const appliedIds = new Set(userOffers.map(o => o.taskId));
+    
+    if (isHelper) {
+      const helperTasks = tasks.filter(task => 
+        task.helperId === user?.id || appliedIds.has(task.id)
+      );
+      return { relevantTasks: helperTasks, appliedTaskIds: appliedIds };
+    } else {
+      const posterTasks = tasks.filter(task => task.posterId === user?.id);
+      return { relevantTasks: posterTasks, appliedTaskIds: appliedIds };
+    }
+  }, [tasks, jobOffers, user?.id, isHelper]);
 
-  const activeTasks = relevantTasks.filter(
-    task => task.status === "assigned" || task.status === "paid_waiting"
-  );
-  const completedTasks = relevantTasks.filter(task => task.status === "completed");
+  const tasksWithOfferCounts = useMemo(() => {
+    if (isHelper) return relevantTasks;
+    
+    return relevantTasks.map(task => {
+      const taskOffers = jobOffers.filter(o => o.taskId === task.id);
+      return {
+        ...task,
+        offers: taskOffers,
+        offerCount: taskOffers.length,
+      } as TaskWithOffers;
+    });
+  }, [relevantTasks, jobOffers, isHelper]);
 
-  const sections: Section[] = [];
-  if (activeTasks.length > 0) {
-    sections.push({ title: "Active", data: activeTasks });
-  }
-  if (completedTasks.length > 0) {
-    sections.push({ title: "Completed", data: completedTasks });
-  }
+  const sections = useMemo(() => {
+    const sectionList: Section[] = [];
+    
+    if (isHelper) {
+      const appliedTasks = tasksWithOfferCounts.filter(
+        task => task.status === "requested" && appliedTaskIds.has(task.id) && task.helperId !== user?.id
+      );
+      const inProgressTasks = tasksWithOfferCounts.filter(
+        task => ["assigned", "in_progress", "worker_marked_done", "paid_waiting"].includes(task.status) && task.helperId === user?.id
+      );
+      const completedTasks = tasksWithOfferCounts.filter(
+        task => task.status === "completed" && task.helperId === user?.id
+      );
+      const disputedTasks = tasksWithOfferCounts.filter(
+        task => task.status === "disputed" && task.helperId === user?.id
+      );
 
-  const totalEarnings = isWorker
-    ? completedTasks.reduce((sum, task) => sum + task.price * (1 - PLATFORM_FEE_PERCENT), 0)
-    : 0;
+      if (appliedTasks.length > 0) sectionList.push({ title: "Applied", data: appliedTasks });
+      if (inProgressTasks.length > 0) sectionList.push({ title: "In Progress", data: inProgressTasks });
+      if (completedTasks.length > 0) sectionList.push({ title: "Completed", data: completedTasks });
+      if (disputedTasks.length > 0) sectionList.push({ title: "Disputed", data: disputedTasks });
+    } else {
+      const openTasks = tasksWithOfferCounts.filter(
+        task => task.status === "requested"
+      );
+      const inProgressTasks = tasksWithOfferCounts.filter(
+        task => ["assigned", "in_progress", "worker_marked_done", "paid_waiting"].includes(task.status)
+      );
+      const completedTasks = tasksWithOfferCounts.filter(
+        task => task.status === "completed"
+      );
+      const disputedTasks = tasksWithOfferCounts.filter(
+        task => task.status === "disputed"
+      );
 
-  const renderItem = ({ item }: { item: Task }) => (
-    <>
-      <TaskCard
-        task={item}
-        isCustomerView={!isWorker}
-        onPress={() => navigation.navigate("TaskDetail", { task: item })}
-      />
-      <Spacer height={Spacing.md} />
-    </>
-  );
+      if (openTasks.length > 0) sectionList.push({ title: "Open", data: openTasks });
+      if (inProgressTasks.length > 0) sectionList.push({ title: "In Progress", data: inProgressTasks });
+      if (completedTasks.length > 0) sectionList.push({ title: "Completed", data: completedTasks });
+      if (disputedTasks.length > 0) sectionList.push({ title: "Disputed", data: disputedTasks });
+    }
+    
+    return sectionList;
+  }, [tasksWithOfferCounts, isHelper, appliedTaskIds, user?.id]);
+
+  const totalEarnings = useMemo(() => {
+    if (!isHelper) return 0;
+    const completed = tasksWithOfferCounts.filter(
+      task => task.status === "completed" && task.helperId === user?.id
+    );
+    return completed.reduce((sum, task) => sum + task.price * (1 - PLATFORM_FEE_PERCENT), 0);
+  }, [tasksWithOfferCounts, isHelper, user?.id]);
+
+  const renderItem = ({ item }: { item: TaskWithOffers }) => {
+    const isPoster = !isHelper;
+    const hasOffers = isPoster && item.offerCount && item.offerCount > 0;
+    const isOpen = item.status === "requested";
+
+    return (
+      <View>
+        <TaskCard
+          task={item}
+          isCustomerView={isPoster}
+          onPress={() => navigation.navigate("TaskDetail", { task: item })}
+        />
+        
+        {isPoster && isOpen && hasOffers ? (
+          <Pressable
+            onPress={() => navigation.navigate("Applicants", { task: item })}
+            style={({ pressed }) => [
+              styles.applicantsButton,
+              { 
+                backgroundColor: theme.primary + "15",
+                borderColor: theme.primary,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <Feather name="users" size={16} color={theme.primary} />
+            <ThemedText type="body" style={{ color: theme.primary, fontWeight: "600" }}>
+              View {item.offerCount} Applicant{item.offerCount !== 1 ? "s" : ""}
+            </ThemedText>
+            <Feather name="chevron-right" size={18} color={theme.primary} />
+          </Pressable>
+        ) : null}
+        
+        {isPoster && isOpen && !hasOffers ? (
+          <View style={[styles.noApplicantsIndicator, { backgroundColor: theme.backgroundSecondary }]}>
+            <Feather name="clock" size={14} color={theme.textSecondary} />
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              Waiting for helpers to apply
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {isHelper && appliedTaskIds.has(item.id) && item.status === "requested" ? (
+          <View style={[styles.appliedIndicator, { backgroundColor: theme.success + "15" }]}>
+            <Feather name="check-circle" size={14} color={theme.success} />
+            <ThemedText type="caption" style={{ color: theme.success, fontWeight: "600" }}>
+              You applied for this job
+            </ThemedText>
+          </View>
+        ) : null}
+        
+        <Spacer height={Spacing.md} />
+      </View>
+    );
+  };
 
   const renderSectionHeader = ({ section }: { section: Section }) => (
     <View style={[styles.sectionHeader, { backgroundColor: theme.backgroundRoot }]}>
@@ -84,8 +192,8 @@ export default function ActivityScreen({ navigation }: ActivityScreenProps) {
         No activity yet
       </ThemedText>
       <ThemedText type="body" style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-        {isWorker
-          ? "Jobs you accept will appear here"
+        {isHelper
+          ? "Jobs you apply for will appear here"
           : "Tasks you post will appear here"}
       </ThemedText>
     </View>
@@ -93,7 +201,7 @@ export default function ActivityScreen({ navigation }: ActivityScreenProps) {
 
   return (
     <ThemedView style={styles.container}>
-      {isWorker && completedTasks.length > 0 ? (
+      {isHelper && totalEarnings > 0 ? (
         <View style={[styles.earningsCard, { backgroundColor: theme.primary, marginTop: headerHeight + Spacing.xl }]}>
           <View>
             <ThemedText type="small" style={styles.earningsLabel}>
@@ -118,7 +226,7 @@ export default function ActivityScreen({ navigation }: ActivityScreenProps) {
         contentContainerStyle={[
           styles.listContent,
           { 
-            paddingTop: isWorker && completedTasks.length > 0 ? Spacing.lg : headerHeight + Spacing.xl,
+            paddingTop: isHelper && totalEarnings > 0 ? Spacing.lg : headerHeight + Spacing.xl,
             paddingBottom: tabBarHeight + Spacing.xl,
           },
         ]}
@@ -186,5 +294,36 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     textAlign: "center",
     paddingHorizontal: Spacing.xl,
+  },
+  applicantsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    marginTop: Spacing.sm,
+  },
+  noApplicantsIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.sm,
+  },
+  appliedIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.sm,
   },
 });

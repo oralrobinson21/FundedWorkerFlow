@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, Pressable, Alert, TextInput, Modal, Image, ScrollView, Dimensions } from "react-native";
+import { View, StyleSheet, Pressable, Alert, TextInput, Modal, Image, ScrollView, Dimensions, Linking } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -12,11 +12,14 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { ScreenScrollView } from "@/components/ScreenScrollView";
 import { StatusBadge } from "@/components/StatusBadge";
+import { SafetyBanner } from "@/components/SafetyBanner";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { HelperWaiverModal, checkHelperWaiverAccepted, setHelperWaiverAccepted } from "@/components/LiabilityWaiver";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
 import { useApp } from "@/context/AppContext";
-import { Task, PLATFORM_FEE_PERCENT, ExtraWorkRequest } from "@/types";
+import { Task, PLATFORM_FEE_PERCENT, ExtraWorkRequest, PHONE_VERIFICATION_THRESHOLD } from "@/types";
 
 type TaskDetailScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "TaskDetail">;
@@ -30,7 +33,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const { task: initialTask } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, userMode, tasks, chatThreads, completeTask, sendOffer, hasProfilePhoto, apiUrl } = useApp();
+  const { user, userMode, tasks, chatThreads, completeTask, sendOffer, hasProfilePhoto, apiUrl, canAcceptMoreJobs, getActiveJobsCount, getMaxActiveJobs } = useApp();
 
   const [extraWorkRequests, setExtraWorkRequests] = useState<ExtraWorkRequest[]>([]);
   const [showExtraWorkModal, setShowExtraWorkModal] = useState(false);
@@ -42,6 +45,7 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
   const [isLoading, setIsLoading] = useState(false);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  const [showHelperWaiverModal, setShowHelperWaiverModal] = useState(false);
   const photoViewerRef = useRef<ScrollView>(null);
 
   const allTasks = tasks ?? [];
@@ -156,7 +160,43 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
       );
       return;
     }
+
+    if (task.price >= PHONE_VERIFICATION_THRESHOLD && !user?.isPhoneVerified) {
+      Alert.alert(
+        "Phone Verification Required",
+        `Sending offers on tasks priced at $${PHONE_VERIFICATION_THRESHOLD} or more requires a verified phone number for your safety.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Verify Phone", 
+            onPress: () => navigation.navigate("MainTabs", { screen: "Profile" } as any)
+          },
+        ]
+      );
+      return;
+    }
+
+    if (!canAcceptMoreJobs()) {
+      const activeCount = getActiveJobsCount();
+      const maxJobs = getMaxActiveJobs();
+      Alert.alert(
+        "Job Limit Reached",
+        `You currently have ${activeCount} active job${activeCount !== 1 ? "s" : ""} (max ${maxJobs}). Complete some of your current jobs before accepting new ones.`,
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    const waiverAccepted = await checkHelperWaiverAccepted();
+    if (!waiverAccepted) {
+      setShowHelperWaiverModal(true);
+      return;
+    }
     
+    proceedWithSendOffer();
+  };
+
+  const proceedWithSendOffer = () => {
     Alert.alert(
       "Send an Offer",
       `Would you like to offer your help for "${task.title}"?`,
@@ -175,6 +215,16 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
         },
       ]
     );
+  };
+
+  const handleHelperWaiverAccept = async () => {
+    await setHelperWaiverAccepted();
+    setShowHelperWaiverModal(false);
+    proceedWithSendOffer();
+  };
+
+  const handleHelperWaiverDecline = () => {
+    setShowHelperWaiverModal(false);
   };
 
   const handleMarkJobDone = () => {
@@ -497,7 +547,8 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           </View>
         ) : null}
 
-        {(task.status === "assigned" || task.status === "completed") && task.helperName ? (
+        {/* Show contact info when helper has been hired - covers all post-hire states */}
+        {["assigned", "accepted", "in_progress", "worker_marked_done", "completed", "disputed"].includes(task.status) && task.helperName ? (
           <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText type="h4" style={styles.sectionTitle}>
               {isPoster ? "Helper" : "Poster"}
@@ -509,12 +560,38 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
                 </ThemedText>
               </View>
               <View style={styles.userInfo}>
-                <ThemedText type="body">
-                  {isPoster ? task.helperName : task.posterName}
-                </ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  {isPoster ? "Your helper" : "Task owner"}
-                </ThemedText>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <ThemedText type="body">
+                    {isPoster ? task.helperName : task.posterName}
+                  </ThemedText>
+                  {(isPoster ? task.helperPhoneVerified : task.posterPhoneVerified) ? (
+                    <VerifiedBadge size="small" />
+                  ) : null}
+                </View>
+                {(isPoster ? task.helperPhone : task.posterPhone) ? (
+                  <Pressable 
+                    onPress={() => {
+                      const phone = isPoster ? task.helperPhone : task.posterPhone;
+                      if (phone) {
+                        try {
+                          Linking.openURL(`tel:${phone}`);
+                        } catch (error) {
+                          console.log("Cannot make call");
+                        }
+                      }
+                    }}
+                    style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, flexDirection: "row", alignItems: "center", marginTop: Spacing.xs }]}
+                  >
+                    <Feather name="phone" size={14} color={theme.primary} />
+                    <ThemedText type="small" style={{ color: theme.primary, marginLeft: Spacing.xs }}>
+                      {isPoster ? task.helperPhone : task.posterPhone}
+                    </ThemedText>
+                  </Pressable>
+                ) : (
+                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                    {isPoster ? "Your helper" : "Task owner"}
+                  </ThemedText>
+                )}
               </View>
             </View>
           </View>
@@ -593,6 +670,10 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
               : "Your payment is held securely until you confirm the task is complete."}
           </ThemedText>
         </View>
+
+        {task.status === "paid_waiting" && userMode === "helper" && !isMyTask ? (
+          <SafetyBanner variant="fraud" />
+        ) : null}
       </ScreenScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
@@ -954,6 +1035,12 @@ export default function TaskDetailScreen({ navigation, route }: TaskDetailScreen
           ) : null}
         </View>
       </Modal>
+
+      <HelperWaiverModal
+        visible={showHelperWaiverModal}
+        onAccept={handleHelperWaiverAccept}
+        onDecline={handleHelperWaiverDecline}
+      />
     </ThemedView>
   );
 }

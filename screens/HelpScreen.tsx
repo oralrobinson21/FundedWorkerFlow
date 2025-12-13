@@ -5,6 +5,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ScreenScrollView } from "@/components/ScreenScrollView";
+import { FraudWarningCard } from "@/components/SafetyBanner";
+import { RegionNotice } from "@/components/RegionNotice";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -64,10 +66,60 @@ export default function HelpScreen({ navigation }: HelpScreenProps) {
         <ThemedText type="h2">Help & Support</ThemedText>
       </View>
 
+      <View style={[styles.welcomeSection, { backgroundColor: theme.primary + "10", borderColor: theme.primary + "30" }]}>
+        <View style={styles.welcomeHeader}>
+          <View style={[styles.welcomeIcon, { backgroundColor: theme.primary }]}>
+            <Feather name="zap" size={20} color="#FFFFFF" />
+          </View>
+          <ThemedText type="h3" style={{ color: theme.primary }}>We're New — And Growing Fast</ThemedText>
+        </View>
+        
+        <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: Spacing.md }}>
+          CityTasks is a brand-new local marketplace, and we're just getting started. That means you may see fewer tasks or helpers in your area right now — but we're growing every single day.
+        </ThemedText>
+        
+        <ThemedText type="body" style={{ fontWeight: "600", marginBottom: Spacing.sm }}>Our goal is simple:</ThemedText>
+        <View style={styles.goalsList}>
+          <View style={styles.goalItem}>
+            <Feather name="check" size={16} color={theme.primary} />
+            <ThemedText type="body" style={{ flex: 1 }}>Make posting a task easier than Craigslist</ThemedText>
+          </View>
+          <View style={styles.goalItem}>
+            <Feather name="check" size={16} color={theme.primary} />
+            <ThemedText type="body" style={{ flex: 1 }}>Make finding help faster than Facebook groups</ThemedText>
+          </View>
+          <View style={styles.goalItem}>
+            <Feather name="check" size={16} color={theme.primary} />
+            <ThemedText type="body" style={{ flex: 1 }}>Make hiring safer and clearer than meeting strangers offline</ThemedText>
+          </View>
+        </View>
+        
+        <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md, marginBottom: Spacing.md }}>
+          Every week more posters and helpers join, new categories open up, and more neighborhoods become active.
+        </ThemedText>
+        
+        <View style={[styles.tipBox, { backgroundColor: theme.backgroundDefault }]}>
+          <Feather name="info" size={16} color={theme.primary} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1 }}>
+            <ThemedText type="body" style={{ fontWeight: "600" }}>If you don't see much activity yet — don't worry.</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: Spacing.xs }}>
+              Post your task anyway (it's free!) Helpers in your area will get notified immediately, and as our community grows, your chances of finding the perfect match will grow with it.
+            </ThemedText>
+          </View>
+        </View>
+        
+        <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md, fontStyle: "italic" }}>
+          Thank you for being an early member of CityTasks. You're part of building something special — a safer, faster, easier way for people in your city to help each other and get things done.
+        </ThemedText>
+      </View>
+
+      <RegionNotice />
+
       <Section icon="dollar-sign" title="About Payments">
         <BulletPoint>Posting a job is free</BulletPoint>
         <BulletPoint>Helpers apply for free</BulletPoint>
         <BulletPoint>You only pay when you select a helper</BulletPoint>
+        <BulletPoint>You can edit your task and adjust your price anytime before hiring a helper</BulletPoint>
         <BulletPoint>{`CityTasks takes ${PLATFORM_FEE_PERCENT * 100}% of the entire job, including extra charges`}</BulletPoint>
         <BulletPoint>Tips always go 100% to the helper</BulletPoint>
         <BulletPoint>Payment is held until both parties confirm the job is complete</BulletPoint>
@@ -82,6 +134,20 @@ export default function HelpScreen({ navigation }: HelpScreenProps) {
         <BulletPoint>Funds are held securely until job completion</BulletPoint>
         <BulletPoint>Both poster and helper must confirm completion</BulletPoint>
         <BulletPoint>Automatic dispute resolution with photo evidence</BulletPoint>
+      </Section>
+
+      <Section icon="alert-triangle" title="Safety & Fraud Prevention">
+        <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: Spacing.md }}>
+          Protect yourself from scams by following these guidelines:
+        </ThemedText>
+        <FraudWarningCard />
+        <View style={{ marginTop: Spacing.md }}>
+          <BulletPoint>Always communicate through the CityTasks app</BulletPoint>
+          <BulletPoint>Never share your personal phone number before hiring</BulletPoint>
+          <BulletPoint>Meet in public places when possible</BulletPoint>
+          <BulletPoint>Trust your instincts - if something feels off, cancel the job</BulletPoint>
+          <BulletPoint>Report suspicious users to CityTasks support immediately</BulletPoint>
+        </View>
       </Section>
 
       <Section icon="percent" title="Fee Breakdown">
@@ -115,6 +181,13 @@ export default function HelpScreen({ navigation }: HelpScreenProps) {
             <ThemedText type="body" style={{ fontWeight: "600", color: theme.success }}>Helper receives:</ThemedText>
             <ThemedText type="body" style={{ fontWeight: "600", color: theme.success }}>$10.00</ThemedText>
           </View>
+        </View>
+
+        <View style={[styles.andyNote, { backgroundColor: theme.backgroundSecondary }]}>
+          <ThemedText type="body" style={{ fontWeight: "600", marginBottom: Spacing.xs }}>Why 15%?</ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            Our founder Andy tried to build this app for free, but his landlord said "that's not how rent works." So we take 15% to keep the lights on, pay for secure payments, and make sure Andy doesn't have to live in his car. Your tips still go 100% to helpers — we're not that desperate. Yet.
+          </ThemedText>
         </View>
       </Section>
 
@@ -159,6 +232,17 @@ export default function HelpScreen({ navigation }: HelpScreenProps) {
         <BulletPoint>{`Extra charges have the same ${PLATFORM_FEE_PERCENT * 100}% platform fee`}</BulletPoint>
         <BulletPoint>Tips are optional and go 100% to the helper</BulletPoint>
         <BulletPoint>Tips have zero platform fee - we don't take anything</BulletPoint>
+      </Section>
+
+      <Section icon="trending-up" title="Attracting Helpers">
+        <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: Spacing.md }}>
+          If no helpers apply to your task within 24 hours, we'll suggest adjusting your price:
+        </ThemedText>
+        <BulletPoint>Posting is free - there's no risk to try</BulletPoint>
+        <BulletPoint>You'll get a notification after 24 hours with no offers</BulletPoint>
+        <BulletPoint>You can adjust your price anytime before hiring a helper</BulletPoint>
+        <BulletPoint>Higher prices attract more helpers and faster responses</BulletPoint>
+        <BulletPoint>Your original task details remain unchanged</BulletPoint>
       </Section>
 
       <View style={[styles.footer, { borderTopColor: theme.border }]}>
@@ -249,5 +333,43 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xl,
     marginTop: Spacing.lg,
     marginBottom: Spacing.xl,
+  },
+  welcomeSection: {
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  welcomeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  welcomeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalsList: {
+    gap: Spacing.sm,
+  },
+  goalItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+  },
+  tipBox: {
+    flexDirection: "row",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    gap: Spacing.sm,
+  },
+  andyNote: {
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
   },
 });

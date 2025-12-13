@@ -39,7 +39,21 @@ export default function VerifyScreen({ navigation, route }: VerifyScreenProps) {
   }, [countdown]);
 
   const handleCodeChange = (text: string, index: number) => {
+    if (text.length === 6) {
+      const digits = text.split("");
+      setCode(digits);
+      handleVerify(text);
+      return;
+    }
+    
     if (text.length > 1) {
+      const pastedDigits = text.replace(/\D/g, "").split("");
+      if (pastedDigits.length >= 6) {
+        const sixDigits = pastedDigits.slice(0, 6);
+        setCode(sixDigits);
+        handleVerify(sixDigits.join(""));
+        return;
+      }
       text = text.slice(-1);
     }
     
@@ -67,10 +81,20 @@ export default function VerifyScreen({ navigation, route }: VerifyScreenProps) {
     try {
       const result = await verifyOTPCode(email, otpCode);
       if (result.success) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Main" }],
-        });
+        const verifiedUser = result.user;
+        const needsProfileCompletion = !verifiedUser?.name || !verifiedUser?.phone || !verifiedUser?.defaultZipCode;
+        
+        if (needsProfileCompletion) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "CompleteProfile" as any }],
+          });
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Main" }],
+          });
+        }
       } else {
         Alert.alert("Invalid Code", result.message || "Please check your code and try again.");
         setCode(["", "", "", "", "", ""]);
@@ -128,6 +152,13 @@ export default function VerifyScreen({ navigation, route }: VerifyScreenProps) {
           <ThemedText type="body" style={[styles.subtitle, { color: theme.textSecondary }]}>
             Enter the 6-digit code sent to{"\n"}{email}
           </ThemedText>
+
+          <View style={[styles.junkMailHint, { backgroundColor: theme.warning + "15" }]}>
+            <Feather name="info" size={14} color={theme.warning} />
+            <ThemedText type="caption" style={{ color: theme.warning, flex: 1 }}>
+              Don't see the email? Check your spam or junk folder.
+            </ThemedText>
+          </View>
 
           <View style={styles.codeContainer}>
             {code.map((digit, index) => (
@@ -220,8 +251,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   subtitle: {
-    marginBottom: Spacing["2xl"],
+    marginBottom: Spacing.lg,
     textAlign: "center",
+  },
+  junkMailHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.xl,
   },
   codeContainer: {
     flexDirection: "row",

@@ -431,18 +431,51 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
   console.log("Manifests updated");
 }
 
+function copyWebDist() {
+  const webDistPath = "web-dist";
+  
+  if (!fs.existsSync(webDistPath)) {
+    console.log("web-dist not found, creating QR code fallback page...");
+    const expsUrl = process.env.REPLIT_DEV_DOMAIN || "localhost";
+    const baseUrl = `https://${expsUrl}`;
+    const template = fs.readFileSync(
+      path.join("scripts", "landing-page-template.html"),
+      "utf-8",
+    );
+    const html = template
+      .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
+      .replace(/EXPS_URL_PLACEHOLDER/g, expsUrl);
+    fs.writeFileSync(path.join("static-build", "index.html"), html);
+    return;
+  }
+
+  console.log("Copying web app from web-dist...");
+  
+  const copyRecursive = (src, dest) => {
+    if (fs.statSync(src).isDirectory()) {
+      if (!fs.existsSync(dest)) {
+        fs.mkdirSync(dest, { recursive: true });
+      }
+      for (const item of fs.readdirSync(src)) {
+        copyRecursive(path.join(src, item), path.join(dest, item));
+      }
+    } else {
+      fs.copyFileSync(src, dest);
+    }
+  };
+
+  for (const item of fs.readdirSync(webDistPath)) {
+    copyRecursive(
+      path.join(webDistPath, item),
+      path.join("static-build", item)
+    );
+  }
+  
+  console.log("Web app copied to static-build");
+}
+
 function createLandingPage(baseUrl) {
-  const expsUrl = baseUrl.replace("https://", "");
-  const template = fs.readFileSync(
-    path.join("scripts", "landing-page-template.html"),
-    "utf-8",
-  );
-
-  const html = template
-    .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
-    .replace(/EXPS_URL_PLACEHOLDER/g, expsUrl);
-
-  fs.writeFileSync(path.join("static-build", "index.html"), html);
+  copyWebDist();
   console.log("Complete");
 }
 
