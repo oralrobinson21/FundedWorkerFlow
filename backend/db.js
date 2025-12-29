@@ -137,10 +137,51 @@ async function initDatabase() {
         resolved_at TIMESTAMP
       );
 
+      -- Admin users table (separate from regular users)
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'super_admin',
+        otp_secret TEXT,
+        otp_enabled BOOLEAN DEFAULT FALSE,
+        recovery_codes TEXT[],
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_login_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE
+      );
+
+      -- Admin sessions
+      CREATE TABLE IF NOT EXISTS admin_sessions (
+        id TEXT PRIMARY KEY,
+        admin_id TEXT REFERENCES admin_users(id),
+        ip_address TEXT,
+        user_agent TEXT,
+        otp_verified BOOLEAN DEFAULT FALSE,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      -- Admin audit logs (immutable)
+      CREATE TABLE IF NOT EXISTS admin_audit_logs (
+        id SERIAL PRIMARY KEY,
+        admin_id TEXT REFERENCES admin_users(id),
+        admin_email TEXT,
+        action TEXT NOT NULL,
+        resource_type TEXT,
+        resource_id TEXT,
+        before_state JSONB,
+        after_state JSONB,
+        ip_address TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       -- Add columns if they don't exist (for migrations)
       DO $$ 
       BEGIN
         BEGIN ALTER TABLE users ADD COLUMN profile_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'poster'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        BEGIN ALTER TABLE users ADD COLUMN role_locked BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN tools_required BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN tools_provided BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
         BEGIN ALTER TABLE tasks ADD COLUMN task_photo_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;

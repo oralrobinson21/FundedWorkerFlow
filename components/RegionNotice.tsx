@@ -18,7 +18,7 @@ export function RegionNotice({ variant = "card" }: RegionNoticeProps) {
       <View style={styles.inlineContainer}>
         <Feather name="map-pin" size={12} color={theme.textSecondary} />
         <ThemedText type="caption" style={{ color: theme.textSecondary, flex: 1 }}>
-          For best results, post tasks in NYC, Yonkers, or North New Jersey (Newark, Jersey City, Hoboken, etc.)
+          Starting in NYC metro - the more you post, the faster we grow into new areas!
         </ThemedText>
       </View>
     );
@@ -31,10 +31,13 @@ export function RegionNotice({ variant = "card" }: RegionNoticeProps) {
       </View>
       <View style={{ flex: 1 }}>
         <ThemedText type="body" style={{ fontWeight: "600" }}>
-          NYC & North Jersey Focus
+          Starting in NYC Metro - Growing Fast!
         </ThemedText>
         <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: Spacing.xs }}>
-          CityTasks is currently focused on the NYC & North New Jersey metro area. You can still post from anywhere, but matches will be fastest in this region.
+          We're launching in the New York metro area and expanding quickly. The more tasks you post, the faster we grow into your neighborhood! Post a task today and help us reach new areas.
+        </ThemedText>
+        <ThemedText type="caption" style={{ color: theme.primary, marginTop: Spacing.xs, fontWeight: "500" }}>
+          Add photos to your tasks for better matches!
         </ThemedText>
       </View>
     </View>

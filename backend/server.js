@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const { pool, initDatabase } = require('./db');
 const { getStripeClient, getStripeSync, getStripePublishableKey } = require('./stripeClient');
+const adminRoutes = require('./adminRoutes');
 
 // Email configuration - Brevo (primary) with logging
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
@@ -274,7 +275,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
 // ⸻ AUTH: VERIFY OTP ⸻
 app.post('/api/auth/verify-otp', async (req, res) => {
   try {
-    const { email, code } = req.body;
+    const { email, code, role } = req.body;
     if (!email || !code) return res.status(400).json({ error: 'Email and code required' });
 
     // Check OTP
@@ -294,28 +295,85 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     // Find or create user
     let userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     let user = userResult.rows[0];
+    let isNewUser = false;
 
     if (!user) {
+      isNewUser = true;
       const userId = generateId();
       await pool.query(`
-        INSERT INTO users (id, email)
-        VALUES ($1, $2)
+        INSERT INTO users (id, email, role, role_locked)
+        VALUES ($1, $2, NULL, false)
       `, [userId, email.toLowerCase()]);
-      user = { id: userId, email: email.toLowerCase() };
+      user = { id: userId, email: email.toLowerCase(), role: null, role_locked: false };
+      
+      await logActivity('user_created', userId, null, null, { email: email.toLowerCase() });
     }
 
     res.json({ 
       success: true, 
+      isNewUser,
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         phone: user.phone,
         defaultZipCode: user.default_zip_code,
+        role: user.role,
+        roleLocked: user.role_locked || false,
       }
     });
   } catch (error) {
     console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ GET USER ROLE ⸻
+app.get('/api/users/:userId/role', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await pool.query('SELECT role, role_locked FROM users WHERE id = $1', [userId]);
+    
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      role: result.rows[0].role || 'poster',
+      roleLocked: result.rows[0].role_locked || false
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ⸻ SET USER ROLE (only if not locked) ⸻
+app.put('/api/users/:userId/role', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { role } = req.body;
+    
+    if (!role || !['poster', 'helper'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be poster or helper' });
+    }
+    
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = userResult.rows[0];
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.role_locked) {
+      return res.status(403).json({ error: 'Role is permanently locked and cannot be changed' });
+    }
+    
+    await pool.query('UPDATE users SET role = $1, role_locked = true WHERE id = $2', [role, userId]);
+    
+    await logActivity('role_set', userId, null, null, { role, locked: true });
+    
+    res.json({ success: true, role, roleLocked: true });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -1459,6 +1517,17 @@ app.post('/api/contact', async (req, res) => {
     console.error('[CONTACT] Error:', error);
     res.status(500).json({ error: 'Failed to submit contact form' });
   }
+});
+
+// ⸻ ADMIN ROUTES ⸻
+app.use('/api/admin', adminRoutes);
+
+// Serve admin dashboard UI
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin', 'index.html'));
+});
+app.get('/admin/*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin', 'index.html'));
 });
 
 // Serve static web app (for Railway/production deployment)

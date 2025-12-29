@@ -26,6 +26,7 @@ interface AppContextType {
   hasProfilePhoto: () => Promise<boolean>;
   logout: () => Promise<void>;
   setUserMode: (mode: UserMode) => Promise<void>;
+  lockRole: (mode: UserMode) => Promise<{ success: boolean; error?: string }>;
   // Phone verification methods
   updatePhone: (phone: string) => Promise<void>;
   verifyPhone: (code: string) => Promise<{ success: boolean; message: string }>;
@@ -248,6 +249,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       
+      if (data.user.roleLocked && data.user.role) {
+        const backendRole = data.user.role as UserMode;
+        setUserModeState(backendRole);
+        await saveUserMode(backendRole);
+      }
+      
       setUser(newUser);
       await saveUser(newUser);
       
@@ -383,6 +390,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setUserMode = async (mode: UserMode) => {
     setUserModeState(mode);
     await saveUserMode(mode);
+  };
+
+  const lockRole = async (mode: UserMode): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: "User not logged in" };
+    
+    try {
+      const API_URL = API_BASE_URL;
+      const response = await fetch(`${API_URL}/api/users/${user.id}/role`, {
+        method: "PUT",
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-id": user.id,
+        },
+        body: JSON.stringify({ role: mode }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        return { success: false, error: error.error || "Failed to lock role" };
+      }
+      
+      setUserModeState(mode);
+      await saveUserMode(mode);
+      return { success: true };
+    } catch (error) {
+      console.error("lockRole error:", error);
+      return { success: false, error: "Network error. Please try again." };
+    }
   };
 
   const createTask = async (taskData: Omit<Task, "id" | "posterId" | "posterName" | "createdAt" | "confirmationCode" | "status">): Promise<Task> => {
@@ -858,6 +893,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         hasProfilePhoto,
         logout,
         setUserMode,
+        lockRole,
         updatePhone,
         verifyPhone,
         addLicense,
