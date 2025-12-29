@@ -50,13 +50,15 @@ function CustomerFAB() {
 export default function MainTabNavigator() {
   const { theme, isDark } = useTheme();
   const { isHelperMode } = useApp();
+  
+  const activeColor = isHelperMode ? theme.secondary : theme.primary;
 
   return (
     <View style={styles.container}>
       <Tab.Navigator
         initialRouteName="HomeTab"
         screenOptions={{
-          tabBarActiveTintColor: theme.tabIconSelected,
+          tabBarActiveTintColor: activeColor,
           tabBarInactiveTintColor: theme.tabIconDefault,
           tabBarStyle: {
             position: "absolute",
