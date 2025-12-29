@@ -22,7 +22,7 @@ export default function VerifyScreen({ navigation, route }: VerifyScreenProps) {
   const { email } = route.params;
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { verifyOTPCode, sendOTPCode } = useApp();
+  const { verifyOTPCode, sendOTPCode, lockRole, userMode } = useApp();
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
   const [resendDisabled, setResendDisabled] = useState(true);
@@ -82,6 +82,16 @@ export default function VerifyScreen({ navigation, route }: VerifyScreenProps) {
       const result = await verifyOTPCode(email, otpCode);
       if (result.success) {
         const verifiedUser = result.user;
+        
+        const lockResult = await lockRole(userMode);
+        if (!lockResult.success) {
+          Alert.alert("Error", lockResult.error || "Failed to set your account type. Please try again.");
+          setCode(["", "", "", "", "", ""]);
+          inputRefs.current[0]?.focus();
+          setIsLoading(false);
+          return;
+        }
+        
         const needsProfileCompletion = !verifiedUser?.name || !verifiedUser?.phone || !verifiedUser?.defaultZipCode;
         
         if (needsProfileCompletion) {

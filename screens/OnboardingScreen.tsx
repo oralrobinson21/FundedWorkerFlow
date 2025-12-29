@@ -56,6 +56,10 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
         <ThemedText type="body" style={[styles.subtitle, { color: theme.textSecondary }]}>
           Get small jobs done. Help your neighbors.
         </ThemedText>
+        
+        <ThemedText type="caption" style={[styles.roleNotice, { color: theme.textSecondary }]}>
+          Choose your account type below. This choice is permanent.
+        </ThemedText>
 
         <View style={styles.regionContainer}>
           <RegionNotice variant="inline" />
@@ -75,10 +79,10 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
               </View>
               <View style={styles.roleTextContainer}>
                 <ThemedText type="h4" style={styles.roleButtonTitle}>
-                  I need help with tasks
+                  Task Poster
                 </ThemedText>
                 <ThemedText type="small" style={styles.roleButtonSubtitle}>
-                  Post jobs and get things done
+                  Post jobs and hire helpers
                 </ThemedText>
               </View>
               <Feather name="chevron-right" size={24} color="#FFFFFF" />
@@ -98,10 +102,10 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
               </View>
               <View style={styles.roleTextContainer}>
                 <ThemedText type="h4" style={styles.roleButtonTitle}>
-                  I want to earn money
+                  Task Helper
                 </ThemedText>
                 <ThemedText type="small" style={styles.roleButtonSubtitle}>
-                  Accept jobs and get paid
+                  Accept jobs and earn money
                 </ThemedText>
               </View>
               <Feather name="chevron-right" size={24} color="#FFFFFF" />
@@ -144,7 +148,12 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     textAlign: "center",
+    marginBottom: Spacing.sm,
+  },
+  roleNotice: {
+    textAlign: "center",
     marginBottom: Spacing.md,
+    fontStyle: "italic",
   },
   regionContainer: {
     marginBottom: Spacing["2xl"],

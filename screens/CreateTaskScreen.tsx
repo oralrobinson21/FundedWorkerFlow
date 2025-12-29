@@ -138,32 +138,28 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
     
     const hasPhoto = await hasProfilePhoto();
     if (!hasPhoto) {
-      Alert.alert(
-        "Profile Photo Required",
-        "Please add a profile photo before posting a task. This helps build trust with helpers.",
-        [
+      const message = "Please add a profile photo before posting a task. This helps build trust with helpers.";
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert("Profile Photo Required", message, [
           { text: "Cancel", style: "cancel" },
-          { 
-            text: "Add Photo", 
-            onPress: () => navigation.goBack()
-          },
-        ]
-      );
+          { text: "Add Photo", onPress: () => navigation.goBack() },
+        ]);
+      }
       return;
     }
     
     if (currentPrice >= PHONE_VERIFICATION_THRESHOLD && !user?.isPhoneVerified) {
-      Alert.alert(
-        "Phone Verification Required",
-        `Tasks priced at $${PHONE_VERIFICATION_THRESHOLD} or more require a verified phone number for your safety.`,
-        [
+      const message = `Tasks priced at $${PHONE_VERIFICATION_THRESHOLD} or more require a verified phone number for your safety.`;
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert("Phone Verification Required", message, [
           { text: "Cancel", style: "cancel" },
-          { 
-            text: "Verify Phone", 
-            onPress: () => navigation.navigate("Profile" as any)
-          },
-        ]
-      );
+          { text: "Verify Phone", onPress: () => navigation.navigate("Profile" as any) },
+        ]);
+      }
       return;
     }
     
@@ -184,10 +180,15 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
         photos,
         isEmergency: isEmergencyCategory,
       });
-      Alert.alert(
-        "Task Posted",
-        "Your task has been posted! Helpers in your area can now see and send offers.",
-        [
+      const successMessage = "Your task has been posted! Helpers in your area can now see and send offers.";
+      if (Platform.OS === "web") {
+        window.alert(successMessage);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Main" }],
+        });
+      } else {
+        Alert.alert("Task Posted", successMessage, [
           {
             text: "View My Tasks",
             onPress: () => {
@@ -197,10 +198,15 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
               });
             },
           },
-        ]
-      );
+        ]);
+      }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to create task. Please try again.");
+      const errorMessage = error.message || "Failed to create task. Please try again.";
+      if (Platform.OS === "web") {
+        window.alert(errorMessage);
+      } else {
+        Alert.alert("Error", errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -562,7 +568,7 @@ export default function CreateTaskScreen({ navigation }: CreateTaskScreenProps) 
           ]}
         >
           <ThemedText type="body" style={styles.submitButtonText}>
-            {isSubmitting ? "Creating..." : "Continue to Payment"}
+            {isSubmitting ? "Posting..." : "Post Task"}
           </ThemedText>
           <Feather name="arrow-right" size={20} color="#FFFFFF" />
         </Pressable>

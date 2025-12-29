@@ -11,6 +11,7 @@ import Spacer from "@/components/Spacer";
 import { InfoBanner } from "@/components/InfoBanner";
 import { EarlyAccessBanner } from "@/components/EarlyAccessBanner";
 import { RegionNotice } from "@/components/RegionNotice";
+import { SignedInBanner } from "@/components/SignedInBanner";
 import { PriceAdjustmentBanner } from "@/components/PriceAdjustmentBanner";
 import { PriceAdjustmentModal } from "@/components/PriceAdjustmentModal";
 import { useTheme } from "@/hooks/useTheme";
@@ -109,6 +110,7 @@ export default function CustomerHomeScreen({ navigation }: CustomerHomeScreenPro
         ListEmptyComponent={renderEmpty}
         ListHeaderComponent={
           <View>
+            <SignedInBanner />
             <EarlyAccessBanner onLearnMore={() => navigation.navigate("Help")} />
             
             <RegionNotice />

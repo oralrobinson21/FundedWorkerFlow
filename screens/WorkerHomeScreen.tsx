@@ -11,6 +11,7 @@ import Spacer from "@/components/Spacer";
 import { InfoBanner } from "@/components/InfoBanner";
 import { EarlyAccessBanner } from "@/components/EarlyAccessBanner";
 import { RegionNotice } from "@/components/RegionNotice";
+import { SignedInBanner } from "@/components/SignedInBanner";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/types";
@@ -117,6 +118,7 @@ export default function WorkerHomeScreen({ navigation }: WorkerHomeScreenProps) 
         ListEmptyComponent={renderEmpty}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
+            <SignedInBanner />
             <EarlyAccessBanner onLearnMore={() => navigation.navigate("Help")} />
             
             <RegionNotice />

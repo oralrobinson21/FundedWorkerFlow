@@ -20,7 +20,7 @@ const AVATAR_COLORS = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#
 export default function ProfileScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { user, tasks, logout, userMode, setUserMode, updateProfilePhoto } = useApp();
+  const { user, tasks, logout, userMode, updateProfilePhoto } = useApp();
   const [isUploading, setIsUploading] = useState(false);
   const [licenseUrls, setLicenseUrls] = useState<string[]>(
     user?.licenses?.map(l => l.imageUrl) ?? []
@@ -40,27 +40,23 @@ export default function ProfileScreen() {
     ? completedTasks.reduce((sum, task) => sum + task.price * (1 - PLATFORM_FEE_PERCENT), 0)
     : completedTasks.reduce((sum, task) => sum + task.price * (1 + PLATFORM_FEE_PERCENT), 0);
 
-  const handleSwitchMode = () => {
-    const newMode = isHelperMode ? "poster" : "helper";
-    Alert.alert(
-      "Switch View",
-      `Switch to ${isHelperMode ? "Poster" : "Helper"} view?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Switch", onPress: () => setUserMode(newMode) },
-      ]
-    );
-  };
 
   const handleLogout = () => {
-    Alert.alert(
-      "Log Out",
-      "Are you sure you want to log out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Log Out", style: "destructive", onPress: logout },
-      ]
-    );
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm("Are you sure you want to log out?");
+      if (confirmed) {
+        logout();
+      }
+    } else {
+      Alert.alert(
+        "Log Out",
+        "Are you sure you want to log out?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Log Out", style: "destructive", onPress: logout },
+        ]
+      );
+    }
   };
 
   const handlePickPhoto = async () => {
@@ -127,6 +123,10 @@ export default function ProfileScreen() {
   };
 
   const handleChangePhoto = () => {
+    if (Platform.OS === "web") {
+      window.alert("Photo upload is available in the Expo Go app on your phone.");
+      return;
+    }
     Alert.alert(
       "Change Profile Photo",
       "How would you like to add a photo?",
@@ -200,6 +200,10 @@ export default function ProfileScreen() {
   };
 
   const handleAddLicense = () => {
+    if (Platform.OS === "web") {
+      window.alert("License upload is available in the Expo Go app on your phone.");
+      return;
+    }
     Alert.alert(
       "Add License",
       "Upload a photo of your professional license or certification (plumber, electrician, etc.)",
@@ -212,18 +216,25 @@ export default function ProfileScreen() {
   };
 
   const handleRemoveLicense = (index: number) => {
-    Alert.alert(
-      "Remove License",
-      "Are you sure you want to remove this license?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Remove", 
-          style: "destructive",
-          onPress: () => setLicenseUrls(prev => prev.filter((_, i) => i !== index))
-        },
-      ]
-    );
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm("Are you sure you want to remove this license?");
+      if (confirmed) {
+        setLicenseUrls(prev => prev.filter((_, i) => i !== index));
+      }
+    } else {
+      Alert.alert(
+        "Remove License",
+        "Are you sure you want to remove this license?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Remove", 
+            style: "destructive",
+            onPress: () => setLicenseUrls(prev => prev.filter((_, i) => i !== index))
+          },
+        ]
+      );
+    }
   };
 
   const avatarIndex = user?.id ? user.id.charCodeAt(0) : 0;
@@ -258,17 +269,15 @@ export default function ProfileScreen() {
           </ThemedText>
         ) : null}
         
+        <ThemedText type="caption" style={[styles.roleLabel, { color: isHelperMode ? theme.secondary : theme.primary }]}>
+          {isHelperMode ? "Task Helper" : "Task Poster"}
+        </ThemedText>
+        
         <View style={styles.nameRow}>
           <ThemedText type="h2" style={styles.name}>
             {user?.name || "User"}
           </ThemedText>
           {isPhoneVerified ? <VerifiedBadge size="medium" /> : null}
-        </View>
-        <View style={[styles.roleBadge, { backgroundColor: isHelperMode ? theme.secondary : theme.primary }]}>
-          <Feather name={isHelperMode ? "tool" : "briefcase"} size={14} color="#FFFFFF" />
-          <ThemedText type="caption" style={styles.roleBadgeText}>
-            {isHelperMode ? "Helper" : "Poster"}
-          </ThemedText>
         </View>
       </View>
 
@@ -296,24 +305,23 @@ export default function ProfileScreen() {
           Account
         </ThemedText>
         
-        <Pressable
-          onPress={handleSwitchMode}
-          style={({ pressed }) => [
+        <View
+          style={[
             styles.menuItem,
-            { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
+            { backgroundColor: theme.backgroundRoot },
           ]}
         >
-          <View style={[styles.menuIconContainer, { backgroundColor: theme.secondary + "20" }]}>
-            <Feather name="repeat" size={20} color={theme.secondary} />
+          <View style={[styles.menuIconContainer, { backgroundColor: isHelperMode ? theme.secondary + "20" : theme.primary + "20" }]}>
+            <Feather name={isHelperMode ? "briefcase" : "clipboard"} size={20} color={isHelperMode ? theme.secondary : theme.primary} />
           </View>
           <View style={styles.menuContent}>
-            <ThemedText type="body">Switch to {isHelperMode ? "Poster" : "Helper"}</ThemedText>
-            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              {isHelperMode ? "Post tasks and get help" : "Accept jobs and earn money"}
+            <ThemedText type="body">Your Role</ThemedText>
+            <ThemedText type="caption" style={{ color: isHelperMode ? theme.secondary : theme.primary, fontWeight: "600" }}>
+              {isHelperMode ? "Task Helper" : "Task Poster"} (Locked)
             </ThemedText>
           </View>
-          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-        </Pressable>
+          <Feather name="lock" size={16} color={theme.textSecondary} />
+        </View>
 
         <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
@@ -339,6 +347,14 @@ export default function ProfileScreen() {
         <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
         <Pressable
+          onPress={() => {
+            const message = "Payments are handled securely through Stripe when you accept a job or hire a helper. No card storage needed.";
+            if (Platform.OS === "web") {
+              window.alert(message);
+            } else {
+              Alert.alert("Payment Methods", message, [{ text: "OK" }]);
+            }
+          }}
           style={({ pressed }) => [
             styles.menuItem,
             { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
@@ -350,7 +366,7 @@ export default function ProfileScreen() {
           <View style={styles.menuContent}>
             <ThemedText type="body">Payment Methods</ThemedText>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              Manage your cards
+              Powered by Stripe
             </ThemedText>
           </View>
           <Feather name="chevron-right" size={20} color={theme.textSecondary} />
@@ -451,6 +467,14 @@ export default function ProfileScreen() {
         </ThemedText>
 
         <Pressable
+          onPress={() => {
+            const message = "Push notifications are coming soon! You'll get alerts when someone sends an offer or messages you.";
+            if (Platform.OS === "web") {
+              window.alert(message);
+            } else {
+              Alert.alert("Notifications", message, [{ text: "OK" }]);
+            }
+          }}
           style={({ pressed }) => [
             styles.menuItem,
             { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
@@ -482,6 +506,14 @@ export default function ProfileScreen() {
         <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
         <Pressable
+          onPress={() => {
+            const message = "We respect your privacy. Your personal information is only shared with helpers or posters you work with. We never sell your data.";
+            if (Platform.OS === "web") {
+              window.alert(message);
+            } else {
+              Alert.alert("Privacy Policy", message, [{ text: "OK" }]);
+            }
+          }}
           style={({ pressed }) => [
             styles.menuItem,
             { backgroundColor: pressed ? theme.backgroundDefault : theme.backgroundRoot },
@@ -553,6 +585,11 @@ const styles = StyleSheet.create({
   },
   photoHint: {
     marginBottom: Spacing.sm,
+  },
+  roleLabel: {
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+    marginTop: Spacing.sm,
   },
   name: {
     marginBottom: Spacing.sm,
